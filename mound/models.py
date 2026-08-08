@@ -71,8 +71,35 @@ PITCH_TYPE_ALIASES: dict[str, str] = {
 }
 
 
+_STAND_ALIASES: dict[str, str] = {
+    "l": "L",
+    "left": "L",
+    "lhb": "L",
+    "lhh": "L",
+    "left handed": "L",
+    "lefty": "L",
+    "r": "R",
+    "right": "R",
+    "rhb": "R",
+    "rhh": "R",
+    "right handed": "R",
+    "righty": "R",
+}
+
+
 def _normalize_key(text: str) -> str:
     return " ".join(text.strip().lower().replace("-", " ").replace("_", " ").split())
+
+
+def normalize_stand(stand: str) -> str | None:
+    """Resolve a user-supplied batter side to ``"L"``/``"R"``.
+
+    Accepts ``"L"``, ``"lefty"``, ``"LHB"`` and similar variants,
+    case-insensitively. Returns ``None`` if nothing matches.
+    """
+    if not stand:
+        return None
+    return _STAND_ALIASES.get(_normalize_key(stand))
 
 
 def normalize_pitch_type(pitch_type: str) -> str | None:
@@ -115,6 +142,7 @@ class Pitch:
     pitcher_name: str | None
     batter_id: int | None
     batter_name: str | None
+    batter_stand: str | None
     pitch_type_code: str | None
     pitch_type: str | None
     velocity: float | None
@@ -174,6 +202,7 @@ def pitch_from_savant(raw: dict) -> Pitch:
         pitcher_name=raw.get("pitcher_name"),
         batter_id=raw.get("batter"),
         batter_name=raw.get("batter_name"),
+        batter_stand=normalize_stand(raw.get("stand")) if raw.get("stand") else None,
         pitch_type_code=pitch_type_code,
         pitch_type=PITCH_TYPE_NAMES.get(pitch_type_code, pitch_type_code),
         velocity=raw.get("start_speed"),

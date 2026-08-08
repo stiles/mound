@@ -68,6 +68,15 @@ PITCH_TYPE_COLORS: dict[str, str] = {
 }
 DEFAULT_PITCH_COLOR = "#4D4D4D"
 
+# Human-readable panel titles for known ``split_by`` columns/values. Falls
+# back to ``str(value)`` for anything not listed here.
+_FACET_LABELS: dict[str, dict[str, str]] = {
+    "batter_stand": {"L": "vs LHB", "R": "vs RHB"},
+}
+_FACET_ORDER: dict[str, dict[str, int]] = {
+    "batter_stand": {"L": 0, "R": 1},
+}
+
 MOUND_STYLE = {
     "font.family": "sans-serif",
     "font.sans-serif": ["Inter", "Helvetica Neue", "Arial", "DejaVu Sans"],
@@ -84,6 +93,24 @@ MOUND_STYLE = {
 
 def _color_for(pitch_type: str | None) -> str:
     return PITCH_TYPE_COLORS.get(pitch_type or "", DEFAULT_PITCH_COLOR)
+
+
+def _resolve_split_column(split_by: str, df) -> str:
+    column = "batter_stand" if split_by in ("stand", "batter_stand") else split_by
+    if column not in df.columns:
+        raise ValueError(f"Cannot split_by unknown column: {split_by!r}")
+    return column
+
+
+def _facet_label(column: str, value) -> str:
+    return _FACET_LABELS.get(column, {}).get(value, str(value))
+
+
+def _facet_values(column: str, df) -> list:
+    values = list(df[column].dropna().unique())
+    order = _FACET_ORDER.get(column, {})
+    values.sort(key=lambda v: (order.get(v, 99), str(v)))
+    return values
 
 
 def _format_date(d: date) -> str:
@@ -195,10 +222,84 @@ def _add_chrome(fig: Figure, headline: str, subtitle: str, source: str) -> None:
         fig.text(0.07, 0.02, source, fontsize=8.5, color=FAINT, ha="left", va="bottom")
 
 
+def _draw_panel(ax: Axes, df, kind: str, color_by: str | None) -> list[str]:
+    """Draw pitch markers plus home plate and strike zone onto ``ax``.
+
+    Returns the scatter group labels (for an optional legend key); empty
+    for heatmaps or single-color scatters.
+    """
+    sz_top = df["sz_top"].mean() if not df.empty and df["sz_top"].notna().any() else DEFAULT_SZ_TOP
+    sz_bot = df["sz_bot"].mean() if not df.empty and df["sz_bot"].notna().any() else DEFAULT_SZ_BOT
+
+    group_labels: list[str] = []
+
+    if kind == "heatmap":
+        if not df.empty:
+            heatmap, _, _ = np.histogram2d(
+                df["plate_x"], df["plate_z"], bins=25, range=[PLOT_X_RANGE, PLOT_Z_RANGE]
+            )
+            masked = np.ma.masked_equal(heatmap, 0)
+            image = ax.imshow(
+                masked.T,
+                origin="lower",
+                extent=[*PLOT_X_RANGE, *PLOT_Z_RANGE],
+                cmap="YlOrRd",
+                aspect="auto",
+                zorder=1,
+            )
+            if heatmap.max() > 0:
+                cbar = ax.figure.colorbar(image, ax=ax, fraction=0.04, pad=0.06, shrink=0.85)
+                cbar.outline.set_visible(False)
+                cbar.set_ticks([1, heatmap.max()])
+                cbar.set_ticklabels(["Fewer", "More"])
+                cbar.ax.tick_params(length=0, labelsize=8.5, colors=FAINT)
+    elif kind == "scatter":
+        if not df.empty and color_by and color_by in df.columns:
+            counts = df[color_by].value_counts()
+            for value in counts.index:
+                group = df[df[color_by] == value]
+                ax.scatter(
+                    group["plate_x"],
+                    group["plate_z"],
+                    color=_color_for(str(value)),
+                    s=44,
+                    alpha=0.85,
+                    linewidths=0.6,
+                    edgecolors=BACKGROUND,
+                    zorder=2,
+                )
+            group_labels = [str(v) for v in counts.index]
+        elif not df.empty:
+            ax.scatter(
+                df["plate_x"],
+                df["plate_z"],
+                color=DEFAULT_PITCH_COLOR,
+                s=44,
+                alpha=0.85,
+                linewidths=0.6,
+                edgecolors=BACKGROUND,
+                zorder=2,
+            )
+    else:
+        raise ValueError(f"Unknown plot kind: {kind!r} (expected 'scatter' or 'heatmap')")
+
+    _draw_home_plate(ax)
+    _draw_strike_zone(ax, sz_top, sz_bot)
+    return group_labels
+
+
+def _finish_panel(ax: Axes) -> None:
+    ax.set_xlim(*PLOT_X_RANGE)
+    ax.set_ylim(*PLOT_Z_RANGE)
+    ax.set_aspect("equal")
+    _style_axes(ax)
+
+
 def plot_zone(
     collection: PitchCollection,
     kind: str = "scatter",
     color_by: str | None = "pitch_type",
+    split_by: str | None = None,
     ax: Axes | None = None,
     title: str | None = None,
     subtitle: str | None = None,
@@ -214,6 +315,11 @@ def plot_zone(
         color_by: column to color/group scatter points by (e.g.
             ``"pitch_type"``); ignored for heatmaps. Pass ``None`` for a
             single color.
+        split_by: column to facet into side-by-side panels, e.g.
+            ``"stand"``/``"batter_stand"`` for a vs-lefties/vs-righties
+            breakdown. One panel is drawn per non-null value present, each
+            with its own strike zone and pitch count. Cannot be combined
+            with an existing ``ax``.
         ax: existing matplotlib axes to draw on. A new, fully styled figure
             (with a headline, dek and source line) is created if omitted;
             when an existing ``ax`` is passed, only a left-aligned title is
@@ -228,6 +334,14 @@ def plot_zone(
         out: if given, save the figure to this path.
     """
     df = collection.to_frame().dropna(subset=["plate_x", "plate_z"])
+
+    if split_by is not None:
+        if ax is not None:
+            raise ValueError("split_by cannot be combined with an existing ax")
+        return _plot_zone_faceted(
+            collection, df, kind, color_by, split_by, title, subtitle, source, out
+        )
+
     owns_figure = ax is None
 
     with plt.rc_context(MOUND_STYLE):
@@ -237,75 +351,10 @@ def plot_zone(
         else:
             fig = ax.figure
 
-        sz_top = (
-            df["sz_top"].mean() if not df.empty and df["sz_top"].notna().any() else DEFAULT_SZ_TOP
-        )
-        sz_bot = (
-            df["sz_bot"].mean() if not df.empty and df["sz_bot"].notna().any() else DEFAULT_SZ_BOT
-        )
-
-        group_labels: list[str] = []
-
-        if kind == "heatmap":
-            if not df.empty:
-                heatmap, _, _ = np.histogram2d(
-                    df["plate_x"], df["plate_z"], bins=25, range=[PLOT_X_RANGE, PLOT_Z_RANGE]
-                )
-                masked = np.ma.masked_equal(heatmap, 0)
-                image = ax.imshow(
-                    masked.T,
-                    origin="lower",
-                    extent=[*PLOT_X_RANGE, *PLOT_Z_RANGE],
-                    cmap="YlOrRd",
-                    aspect="auto",
-                    zorder=1,
-                )
-                if heatmap.max() > 0:
-                    cbar = fig.colorbar(image, ax=ax, fraction=0.04, pad=0.06, shrink=0.85)
-                    cbar.outline.set_visible(False)
-                    cbar.set_ticks([1, heatmap.max()])
-                    cbar.set_ticklabels(["Fewer", "More"])
-                    cbar.ax.tick_params(length=0, labelsize=8.5, colors=FAINT)
-        elif kind == "scatter":
-            if not df.empty and color_by and color_by in df.columns:
-                counts = df[color_by].value_counts()
-                for value in counts.index:
-                    group = df[df[color_by] == value]
-                    ax.scatter(
-                        group["plate_x"],
-                        group["plate_z"],
-                        color=_color_for(str(value)),
-                        s=44,
-                        alpha=0.85,
-                        linewidths=0.6,
-                        edgecolors=BACKGROUND,
-                        zorder=2,
-                    )
-                group_labels = [str(v) for v in counts.index]
-            elif not df.empty:
-                ax.scatter(
-                    df["plate_x"],
-                    df["plate_z"],
-                    color=DEFAULT_PITCH_COLOR,
-                    s=44,
-                    alpha=0.85,
-                    linewidths=0.6,
-                    edgecolors=BACKGROUND,
-                    zorder=2,
-                )
-        else:
-            raise ValueError(f"Unknown plot kind: {kind!r} (expected 'scatter' or 'heatmap')")
-
-        _draw_home_plate(ax)
-        _draw_strike_zone(ax, sz_top, sz_bot)
-
+        group_labels = _draw_panel(ax, df, kind, color_by)
         if len(group_labels) > 1:
             _draw_legend_key(ax, group_labels)
-
-        ax.set_xlim(*PLOT_X_RANGE)
-        ax.set_ylim(*PLOT_Z_RANGE)
-        ax.set_aspect("equal")
-        _style_axes(ax)
+        _finish_panel(ax)
 
         headline = title if title is not None else _default_headline(collection, df)
         if owns_figure:
@@ -318,3 +367,48 @@ def plot_zone(
             fig.savefig(out, dpi=200, bbox_inches="tight", pad_inches=0.2)
 
     return ax
+
+
+def _plot_zone_faceted(
+    collection: PitchCollection,
+    df,
+    kind: str,
+    color_by: str | None,
+    split_by: str,
+    title: str | None,
+    subtitle: str | None,
+    source: str,
+    out: str | None,
+):
+    column = _resolve_split_column(split_by, df)
+    values = _facet_values(column, df)
+    if not values:
+        raise ValueError(f"No non-null values found for split_by={split_by!r}")
+
+    with plt.rc_context(MOUND_STYLE):
+        fig, axes = plt.subplots(1, len(values), figsize=(5.0 * len(values), 6.4), sharey=True)
+        axes = np.atleast_1d(axes)
+        fig.subplots_adjust(top=0.84, bottom=0.09, left=0.08, right=0.96, wspace=0.12)
+
+        for i, (value, panel_ax) in enumerate(zip(values, axes, strict=True)):
+            subset = df[df[column] == value]
+            group_labels = _draw_panel(panel_ax, subset, kind, color_by)
+            if i == 0 and len(group_labels) > 1:
+                _draw_legend_key(panel_ax, group_labels)
+            _finish_panel(panel_ax)
+            if i > 0:
+                panel_ax.tick_params(labelleft=False)
+
+            panel_title = f"{_facet_label(column, value)} (n={len(subset)})"
+            panel_ax.set_title(
+                panel_title, loc="left", fontsize=11, fontweight="semibold", color=INK
+            )
+
+        headline = title if title is not None else _default_headline(collection, df)
+        dek = subtitle if subtitle is not None else _default_subtitle(df)
+        _add_chrome(fig, headline, dek, source)
+
+        if out:
+            fig.savefig(out, dpi=200, bbox_inches="tight", pad_inches=0.2)
+
+    return axes

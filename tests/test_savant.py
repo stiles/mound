@@ -20,6 +20,15 @@ def test_game_pitches_for_pitcher_normalizes_fields(mocked_responses):
     assert first.is_strike is True  # called_strike counts as a strike
 
 
+def test_game_pitches_for_pitcher_normalizes_batter_stand(mocked_responses):
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    pitches = game_pitches_for_pitcher(1001, 808963)
+
+    assert [p.batter_stand for p in pitches[:3]] == ["L", "L", "L"]
+    assert [p.batter_stand for p in pitches[3:]] == ["R", "R"]
+
+
 def test_game_pitches_computes_in_zone(mocked_responses):
     register_gf(mocked_responses, 1001, "gf_game_1001.json")
 

@@ -19,6 +19,7 @@ def _pitch(pitch_type_code, pitch_type, is_strike, game_date="2025-07-01", **ove
         pitcher_name="Roki Sasaki",
         batter_id=1,
         batter_name="Test Batter",
+        batter_stand="R",
         pitch_type_code=pitch_type_code,
         pitch_type=pitch_type,
         velocity=95.0,

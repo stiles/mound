@@ -22,6 +22,7 @@ def _sample_collection() -> PitchCollection:
         pitcher_name="Roki Sasaki",
         batter_id=1,
         batter_name="Test Batter",
+        batter_stand="L",
         pitch_type_code="FS",
         pitch_type="splitter",
         velocity=89.0,

@@ -5,6 +5,7 @@
     mound mix "Roki Sasaki" --last 4
     mound results "Roki Sasaki" --last 4 --pitch splitter
     mound zone "Roki Sasaki" --pitch splitter --last 4 --out zone.png
+    mound zone "Roki Sasaki" --last 8 --split-by stand --out zone.png
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ def _get_pitches(
     until: str | None,
     game: int | None,
     pitch: str | None,
+    stand: str | None = None,
 ) -> PitchCollection:
     try:
         pitcher = Pitcher(name)
@@ -43,7 +45,9 @@ def _get_pitches(
         _fail(str(exc))
 
     try:
-        return pitcher.pitches(last=last, since=since, until=until, game=game, pitch_type=pitch)
+        return pitcher.pitches(
+            last=last, since=since, until=until, game=game, pitch_type=pitch, stand=stand
+        )
     except Exception as exc:  # surface retrieval failures without a traceback
         _fail(f"Failed to retrieve pitches for {pitcher.name}: {exc}")
 
@@ -73,6 +77,7 @@ def pitches(
     until: str | None = typer.Option(None, "--until", help="End date (YYYY-MM-DD)"),
     game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
     pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
+    stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
     export_path: str | None = typer.Option(None, "--export", help="Path to export results to"),
     export_format: str | None = typer.Option(
         None, "--format", help="Export format (csv/json/parquet); inferred from --export if omitted"
@@ -80,7 +85,7 @@ def pitches(
     limit: int | None = typer.Option(20, "--limit", help="Rows to print (use 0 for all)"),
 ) -> None:
     """Retrieve individual pitch records for a pitcher."""
-    collection = _get_pitches(name, last, since, until, game, pitch)
+    collection = _get_pitches(name, last, since, until, game, pitch, stand)
 
     if collection.empty:
         typer.echo("No pitches found for the given filters.")
@@ -113,9 +118,10 @@ def mix(
     until: str | None = typer.Option(None, "--until", help="End date (YYYY-MM-DD)"),
     game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
     pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
+    stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
 ) -> None:
     """Calculate a pitcher's pitch mix (usage percentage by pitch type)."""
-    collection = _get_pitches(name, last, since, until, game, pitch)
+    collection = _get_pitches(name, last, since, until, game, pitch, stand)
 
     if collection.empty:
         typer.echo("No pitches found for the given filters.")
@@ -134,9 +140,10 @@ def results(
     until: str | None = typer.Option(None, "--until", help="End date (YYYY-MM-DD)"),
     game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
     pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
+    stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
 ) -> None:
     """Show pitch counts, strikes/balls and strike rate, broken out by pitch type."""
-    collection = _get_pitches(name, last, since, until, game, pitch)
+    collection = _get_pitches(name, last, since, until, game, pitch, stand)
 
     if collection.empty:
         typer.echo("No pitches found for the given filters.")
@@ -165,16 +172,20 @@ def zone(
     until: str | None = typer.Option(None, "--until", help="End date (YYYY-MM-DD)"),
     game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
     pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
+    stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
     kind: str = typer.Option("scatter", "--kind", help="'scatter' or 'heatmap'"),
+    split_by: str | None = typer.Option(
+        None, "--split-by", help="Facet into side-by-side panels, e.g. 'stand'"
+    ),
     out: str = typer.Option("zone.png", "--out", help="Output image path"),
 ) -> None:
     """Plot pitch locations against a theoretical strike zone."""
-    collection = _get_pitches(name, last, since, until, game, pitch)
+    collection = _get_pitches(name, last, since, until, game, pitch, stand)
 
     if collection.empty:
         _fail("No pitches found for the given filters.")
 
-    collection.plot_zone(kind=kind, out=out)
+    collection.plot_zone(kind=kind, split_by=split_by, out=out)
     typer.echo(f"Saved plot of {len(collection)} pitch(es) to {out}")
 
 

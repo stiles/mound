@@ -13,12 +13,18 @@ Mound answers questions like these with a few CLI commands or a few lines of Pyt
 ## Install
 
 ```bash
+pip install mound
+
+# Parquet export support:
+pip install "mound[parquet]"
+```
+
+Or from a local checkout (editable):
+
+```bash
 git clone https://github.com/stiles/mound.git
 cd mound
 pip install -e .
-
-# Parquet export support:
-pip install -e ".[parquet]"
 ```
 
 Requires Python 3.10+.
@@ -75,6 +81,7 @@ pitches.to_csv("roki_last4.csv")
 | `since` / `until` | date range (`"YYYY-MM-DD"` or `date`), inclusive |
 | `game` | one or more MLB `game_pk` values |
 | `pitch_type` | a pitch name, alias, or Statcast code (see below) |
+| `stand` | batter side: `"L"`/`"left"`/`"LHB"` or `"R"`/`"right"`/`"RHB"` |
 
 Filtering a `PitchCollection` always returns another `PitchCollection`, so any combination of `.filter()`, `.pitch_mix()`, `.strike_rate()`, `.plot_zone()` and export methods composes freely.
 
@@ -97,6 +104,18 @@ splitters.plot_zone(
 ```
 
 Pass `subtitle=""` or `source=""` to omit either. Passing your own `ax` (e.g. for a multi-panel figure) skips the dek/source and falls back to a plain left-aligned title, so `plot_zone()` behaves as a well-mannered subplot.
+
+Pitch location isn't mirrored for batter handedness, so mixing lefties and righties in one panel can blur the picture — pass `split_by="stand"` to break it into a vs-LHB / vs-RHB pair, each with its own strike zone and pitch count:
+
+![Roki Sasaki splitter locations, split by batter handedness](docs/images/roki_splitter_zone_by_stand.png)
+
+```python
+splitters.plot_zone(split_by="stand", out="splitter_zone_by_stand.png")
+```
+
+```bash
+mound zone "Roki Sasaki" --last 4 --pitch splitter --split-by stand --out splitter_zone_by_stand.png
+```
 
 ## Pitch types
 

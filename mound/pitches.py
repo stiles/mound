@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 from mound import statsapi
-from mound.models import Pitch, normalize_pitch_type
+from mound.models import Pitch, normalize_pitch_type, normalize_stand
 from mound.players import Player, resolve_player
 from mound.savant import game_pitches_for_pitcher
 
@@ -96,11 +96,15 @@ class PitchCollection:
         until: DateLike | None = None,
         is_strike: bool | None = None,
         in_zone: bool | None = None,
+        stand: str | None = None,
     ) -> PitchCollection:
         """Return a new :class:`PitchCollection` narrowed by the given criteria.
 
         ``pitch_type`` accepts familiar names (``"splitter"``), aliases
         (``"split-finger"``) or raw Statcast codes (``"FS"``), case-insensitive.
+
+        ``stand`` filters by batter side, e.g. ``"L"``/``"left"``/``"LHB"``
+        or ``"R"``/``"right"``/``"RHB"`` (case-insensitive).
         """
         pitches = self._pitches
 
@@ -126,6 +130,10 @@ class PitchCollection:
 
         if in_zone is not None:
             pitches = [p for p in pitches if p.in_zone == in_zone]
+
+        if stand is not None:
+            wanted_stand = normalize_stand(stand) or stand.strip().upper()
+            pitches = [p for p in pitches if p.batter_stand == wanted_stand]
 
         return PitchCollection(pitches, pitcher=self.pitcher)
 
@@ -215,6 +223,7 @@ class Pitcher:
         game: int | list[int] | None = None,
         season: int | None = None,
         pitch_type: str | list[str] | None = None,
+        stand: str | None = None,
     ) -> PitchCollection:
         """Retrieve this pitcher's pitches.
 
@@ -226,6 +235,9 @@ class Pitcher:
         - ``since``/``until``: a date range (inclusive), given as
           ``"YYYY-MM-DD"`` strings or :class:`datetime.date` objects.
         - ``season``: a single MLB season, if no explicit dates are given.
+
+        ``pitch_type`` and ``stand`` are applied as post-retrieval filters
+        (see :meth:`PitchCollection.filter`).
 
         With no arguments, defaults to the current season's appearances.
         """
@@ -264,4 +276,6 @@ class Pitcher:
         collection = PitchCollection(all_pitches, pitcher=self.player)
         if pitch_type is not None:
             collection = collection.filter(pitch_type=pitch_type)
+        if stand is not None:
+            collection = collection.filter(stand=stand)
         return collection

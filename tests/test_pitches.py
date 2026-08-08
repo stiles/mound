@@ -89,6 +89,25 @@ def test_collection_filter_by_game(mocked_responses):
     assert len(game_1002_only) == 5
 
 
+def test_pitches_stand_shortcut_filters_at_retrieval(mocked_responses):
+    _register_roki_with_all_games(mocked_responses)
+
+    collection = Pitcher(808963).pitches(last=3, season=2025, stand="left")
+
+    assert len(collection) == 9  # 3 LHB pitches per game across games 1001/1002/1003
+    assert all(p.batter_stand == "L" for p in collection)
+
+
+def test_collection_filter_by_stand_is_alias_tolerant(mocked_responses):
+    _register_roki_with_all_games(mocked_responses)
+
+    collection = Pitcher(808963).pitches(last=3, season=2025)
+    righties = collection.filter(stand="RHB")
+
+    assert len(righties) == 7  # 2 + 2 + 3 RHB pitches across games 1001/1002/1003
+    assert all(p.batter_stand == "R" for p in righties)
+
+
 def test_empty_collection_has_no_pitches():
     from mound.pitches import PitchCollection
 

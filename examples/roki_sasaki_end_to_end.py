@@ -8,7 +8,7 @@ know an MLB player ID or API endpoint:
     3. Isolate his splitter.
     4. Calculate how frequently he threw it.
     5. Calculate its strike rate.
-    6. Visualize where he located it.
+    6. Visualize where he located it, overall and split by batter handedness.
     7. Save the underlying pitch data locally.
 
 Requires network access (hits the live MLB Stats API and Baseball Savant).
@@ -57,10 +57,14 @@ def main() -> None:
     print(f"Splitter/forkball strike rate: {splitters.strike_rate():.1f}% "
           f"({len(splitters)} pitches)\n")
 
-    # 6. Visualize where he located it.
+    # 6. Visualize where he located it, overall and split by batter handedness.
     zone_path = OUTPUT_DIR / "roki_splitter_zone.png"
     splitters.plot_zone(out=str(zone_path))
     print(f"Saved location plot to {zone_path}")
+
+    zone_by_stand_path = OUTPUT_DIR / "roki_splitter_zone_by_stand.png"
+    splitters.plot_zone(split_by="stand", out=str(zone_by_stand_path))
+    print(f"Saved location plot (split by stand) to {zone_by_stand_path}")
 
     # 7. Save the underlying pitch data locally.
     csv_path = OUTPUT_DIR / "roki_last4_pitches.csv"
