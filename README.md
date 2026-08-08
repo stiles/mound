@@ -17,6 +17,9 @@ pip install mound
 
 # Parquet export support:
 pip install "mound[parquet]"
+
+# KDE heatmaps (kind="kde"):
+pip install "mound[viz]"
 ```
 
 Or from a local checkout (editable):
@@ -52,6 +55,13 @@ mound zone "Roki Sasaki" --pitch splitter --last 4 --out splitter_zone.png
 
 # Export the underlying data
 mound pitches "Roki Sasaki" --last 4 --export roki_last4.csv
+
+# Cache Savant responses locally; a later run for the same pitcher only
+# fetches the games it hasn't seen yet
+mound pitches "Roki Sasaki" --last 4 --cache
+
+# Download broadcast clips for a set of pitches
+mound video "Roki Sasaki" --pitch splitter --last 4 --out-dir clips
 ```
 
 Run `mound --help` or `mound <command> --help` for the full option list.
@@ -71,6 +81,14 @@ splitters.strike_rate()
 splitters.plot_zone(out="splitter_zone.png")
 
 pitches.to_csv("roki_last4.csv")
+
+# Cache Savant responses locally; a later call for the same pitcher only
+# fetches the games it hasn't seen yet
+pitches = roki.pitches(last=8, cache=True)
+
+# Download a broadcast clip for a single pitch, or a whole collection
+splitters.pitches[0].download_video()
+splitters.download_videos(out_dir="clips")
 ```
 
 `Pitcher.pitches()` and `PitchCollection.filter()` both accept:
@@ -98,10 +116,12 @@ splitters.plot_zone(
     title="Sasaki leans on the splitter",
     subtitle="134 pitches since the All-Star break",
     source="Source: Baseball Savant",
-    kind="heatmap",  # or "scatter" (default)
+    kind="heatmap",  # "scatter" (default), "heatmap", or "kde"
     out="splitter_zone.png",
 )
 ```
+
+`kind="heatmap"` bins pitches into a plain 2D histogram; `kind="kde"` renders a smoother kernel density surface instead (better suited to larger samples), via the optional `scipy` dependency (`pip install "mound[viz]"`). Pass `bw_method` to control its bandwidth, e.g. `plot_zone(kind="kde", bw_method=0.3)`.
 
 Pass `subtitle=""` or `source=""` to omit either. Passing your own `ax` (e.g. for a multi-panel figure) skips the dek/source and falls back to a plain left-aligned title, so `plot_zone()` behaves as a well-mannered subplot.
 
@@ -116,6 +136,17 @@ splitters.plot_zone(split_by="stand", out="splitter_zone_by_stand.png")
 ```bash
 mound zone "Roki Sasaki" --last 4 --pitch splitter --split-by stand --out splitter_zone_by_stand.png
 ```
+
+## `is_strike` vs. `in_zone`
+
+These sound interchangeable but aren't, and it's easy to expect a plotted zone box to reconcile with the wrong one:
+
+- **`is_strike`** is whatever counts as a strike *by rule*: a called strike, a swinging strike, a foul ball, or a ball put in play. It's about the ruling, not the location — a pitch that draws a swing and a miss (or a foul, or a groundout) well outside the box still counts as a strike.
+- **`in_zone`** is purely locational: does the pitch — modeled as an actual baseball, not a point — overlap the strike-zone rectangle for that batter's `sz_top`/`sz_bot`?
+
+A good chase pitch (splitters, sweepers, low sinkers) will show a much higher `is_strike` rate than `in_zone` rate. That's the pitch working as intended, not a bug — batters are swinging at (or getting jammed by) pitches outside the zone on purpose. If a `plot_zone()` subtitle's strike percentage doesn't match how many dots visually sit inside the drawn box, that's this distinction at work; check `in_zone` counts (or `.filter(in_zone=True)`) for the locational answer, not `strike_rate()`.
+
+`in_zone` models the ball as a sphere overlapping the zone rectangle, which matches Statcast's own methodology (checked against Baseball Savant's own `zone`/`isInZone` fields across thousands of live pitches with zero mismatches). One consequence: a pitch can register `in_zone=True` even when its center is outside the box on *both* axes at once, as long as it's within one ball radius of a corner — a legitimate, if visually surprising, edge case. `in_zone` also reflects Statcast's calculated geometry, not the home-plate umpire's real-time call; the two disagree routinely on borderline pitches, especially double-edge corner cases (away *and* low/high at once). That's normal umpire variance, not an error in Mound.
 
 ## Pitch types
 
@@ -141,6 +172,35 @@ Statcast tags every pitch with a short code. Mound normalizes these into human-r
 
 **Note on Roki Sasaki's signature pitch:** Statcast classifies it inconsistently start-to-start — sometimes as a splitter (`FS`), sometimes as a forkball (`FO`), depending on its movement profile in a given game. If a `pitch_type="splitter"` query looks incomplete, check `pitch_type="forkball"` too, or filter using both.
 
+## Caching
+
+By default every call re-fetches from Baseball Savant. Pass `cache=True` (Python) or `--cache` (CLI) to cache each game's raw Savant response locally, keyed by `game_pk`:
+
+```python
+pitches = roki.pitches(last=8, cache=True)
+```
+
+```bash
+mound pitches "Roki Sasaki" --last 8 --cache
+```
+
+Because a finished game's data never changes, a cache hit is never stale — calling again later for the same pitcher only fetches the starts it hasn't seen yet, without any separate "update" step. The cache defaults to `~/.cache/mound` (override with the `MOUND_CACHE_DIR` environment variable, `cache="/some/dir"`, or `--cache-dir`).
+
+## Video downloads
+
+Each pitch's `pitch_id` doubles as the `playId` on a Baseball Savant clip page, which embeds a direct broadcast clip:
+
+```python
+splitters.pitches[0].download_video()          # videos/<pitch_id>.mp4
+splitters.download_videos(out_dir="clips")      # every pitch in the collection
+```
+
+```bash
+mound video "Roki Sasaki" --pitch splitter --last 4 --out-dir clips
+```
+
+Only the clip page's default embedded angle is captured this way (in practice, the home broadcast feed) — the page's away-broadcast toggle loads its clip via client-side JavaScript rather than a second tag in the page's HTML, so it isn't reachable with a plain request. Pitches with no video coverage are skipped with a warning by default; pass `skip_errors=False` to raise instead.
+
 ## Data sources
 
 Mound calls two unofficial, public MLB data services directly:
@@ -148,7 +208,7 @@ Mound calls two unofficial, public MLB data services directly:
 - **[MLB Stats API](https://statsapi.mlb.com)** — player search/lookup and game logs, used to resolve a pitcher's identity and discover which games to pull.
 - **[Baseball Savant](https://baseballsavant.mlb.com)** — the `/gf` game-feed endpoint, used for pitch-by-pitch Statcast data (location, velocity, pitch type, count, outcome).
 
-Both are unofficial and undocumented; endpoints or response shapes could change without notice. Mound sends a descriptive `User-Agent` and retries transient failures, but does not currently cache responses, so repeated queries re-fetch data from these services.
+Both are unofficial and undocumented; endpoints or response shapes could change without notice. Mound sends a descriptive `User-Agent` and retries transient failures. Responses aren't cached unless you opt in with `cache=True`/`--cache` (see [Caching](#caching)).
 
 ## Development
 
@@ -162,11 +222,13 @@ Tests run entirely against mocked HTTP fixtures in `tests/fixtures/` (via the `r
 
 ## Known limitations
 
-- No caching yet — every call re-fetches from the MLB Stats API / Baseball Savant.
+- Caching is opt-in and off by default — every call re-fetches unless `cache=True`/`--cache` is given (see [Caching](#caching)).
 - Pitch classification comes from Statcast's own model and can be inconsistent for pitches with unusual movement (see the Roki Sasaki note above).
+- `in_zone` is Statcast's calculated geometry, not the umpire's call, and `is_strike` isn't the same thing as "located in the zone" — see [`is_strike` vs. `in_zone`](#is_strike-vs-in_zone) above.
 - Only pitchers are supported as the primary retrieval unit; there's no batter-vs-pitcher matchup view yet (see [ROADMAP.md](ROADMAP.md)).
 - Historical data availability depends on Statcast/Savant coverage, which is generally reliable from 2015 onward.
 - All requests are synchronous and unthrottled beyond basic retry/backoff; heavy bulk retrieval (e.g. a full season) will be slow.
+- Video downloads only capture a clip page's default embedded broadcast angle (see [Video downloads](#video-downloads)).
 
 ## Roadmap
 

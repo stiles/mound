@@ -23,11 +23,14 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 from mound import statsapi
+from mound.cache import Cache, resolve_cache
 from mound.models import Pitch, normalize_pitch_type, normalize_stand
 from mound.players import Player, resolve_player
 from mound.savant import game_pitches_for_pitcher
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import matplotlib.axes
 
 
@@ -159,6 +162,12 @@ class PitchCollection:
 
         return plot_zone(self, **kwargs)
 
+    # -- video ------------------------------------------------------------
+    def download_videos(self, out_dir: str | Path = "videos", **kwargs) -> list[Path]:
+        from mound.video import download_videos
+
+        return download_videos(self, out_dir=out_dir, **kwargs)
+
     # -- export -----------------------------------------------------------
     def to_csv(self, path: str, **kwargs) -> None:
         from mound.export import to_csv
@@ -224,6 +233,7 @@ class Pitcher:
         season: int | None = None,
         pitch_type: str | list[str] | None = None,
         stand: str | None = None,
+        cache: bool | str | Path | Cache | None = False,
     ) -> PitchCollection:
         """Retrieve this pitcher's pitches.
 
@@ -239,8 +249,16 @@ class Pitcher:
         ``pitch_type`` and ``stand`` are applied as post-retrieval filters
         (see :meth:`PitchCollection.filter`).
 
+        ``cache`` enables a local file cache of Savant's per-game responses
+        (disabled by default): ``True`` uses the default cache location,
+        or pass a directory path to use a custom one. Because a finished
+        game's data never changes, repeat calls automatically skip
+        re-fetching any ``game_pk`` already cached -- so caching a pitcher
+        now and calling again later only fetches their new starts.
+
         With no arguments, defaults to the current season's appearances.
         """
+        cache_backend = resolve_cache(cache)
         if game is not None:
             game_pks = [game] if isinstance(game, int) else list(game)
         else:
@@ -271,7 +289,9 @@ class Pitcher:
 
         all_pitches: list[Pitch] = []
         for game_pk in game_pks:
-            all_pitches.extend(game_pitches_for_pitcher(game_pk, self.player.id))
+            all_pitches.extend(
+                game_pitches_for_pitcher(game_pk, self.player.id, cache=cache_backend)
+            )
 
         collection = PitchCollection(all_pitches, pitcher=self.player)
         if pitch_type is not None:

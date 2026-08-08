@@ -22,6 +22,10 @@ def load_fixture(name: str) -> dict:
     return json.loads((FIXTURES_DIR / name).read_text())
 
 
+def load_text_fixture(name: str) -> str:
+    return (FIXTURES_DIR / name).read_text()
+
+
 @pytest.fixture
 def mocked_responses():
     # `assert_all_requests_are_fired=False` because several tests share a

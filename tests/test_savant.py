@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from mound.savant import game_pitches_for_pitcher
+from mound.cache import FileCache
+from mound.savant import fetch_game_feed, game_pitches_for_pitcher
 from tests.conftest import register_gf
 
 
@@ -62,3 +63,34 @@ def test_game_pitches_reads_from_away_pitchers(mocked_responses):
 
     assert len(pitches) == 5
     assert all(p.game_pk == 1002 for p in pitches)
+
+
+def test_fetch_game_feed_second_call_hits_cache_not_network(mocked_responses, tmp_path):
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+    cache = FileCache(tmp_path)
+
+    fetch_game_feed(1001, cache=cache)
+    assert len(mocked_responses.calls) == 1
+
+    fetch_game_feed(1001, cache=cache)
+    assert len(mocked_responses.calls) == 1  # second call served from cache
+
+
+def test_fetch_game_feed_without_cache_hits_network_every_time(mocked_responses):
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    fetch_game_feed(1001)
+    fetch_game_feed(1001)
+
+    assert len(mocked_responses.calls) == 2
+
+
+def test_game_pitches_for_pitcher_uses_cache(mocked_responses, tmp_path):
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+    cache = FileCache(tmp_path)
+
+    first = game_pitches_for_pitcher(1001, 808963, cache=cache)
+    second = game_pitches_for_pitcher(1001, 808963, cache=cache)
+
+    assert len(mocked_responses.calls) == 1
+    assert len(first) == len(second) == 5

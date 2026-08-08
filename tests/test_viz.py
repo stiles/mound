@@ -97,3 +97,53 @@ def test_plot_zone_without_split_by_still_returns_single_axes(mixed_stand_collec
     ax = plot_zone(mixed_stand_collection)
 
     assert ax.get_xlim() is not None
+
+
+@pytest.fixture
+def scattered_collection() -> PitchCollection:
+    # KDE needs real spread on both axes; a tight cluster in one spot has a
+    # singular covariance matrix and would raise inside scipy.
+    coords = [(-0.4, 1.8), (-0.1, 2.4), (0.2, 3.0), (0.5, 1.6), (0.0, 2.2)]
+    return PitchCollection([_pitch(x, z, "R") for x, z in coords])
+
+
+def test_kde_requires_scipy_returns_axes(scattered_collection):
+    pytest.importorskip("scipy")
+
+    ax = plot_zone(scattered_collection, kind="kde")
+
+    assert ax.get_xlim() is not None
+
+
+def test_kde_accepts_bw_method(scattered_collection):
+    pytest.importorskip("scipy")
+
+    ax = plot_zone(scattered_collection, kind="kde", bw_method=0.5)
+
+    assert ax.get_xlim() is not None
+
+
+def test_kde_with_split_by_returns_one_axes_per_side():
+    pytest.importorskip("scipy")
+    pitches = (
+        [_pitch(x, z, "L") for x, z in [(-0.4, 1.8), (-0.1, 2.4), (0.2, 3.0)]]
+        + [_pitch(x, z, "R") for x, z in [(0.5, 1.6), (0.0, 2.2), (0.3, 2.8)]]
+    )
+    collection = PitchCollection(pitches)
+
+    axes = plot_zone(collection, kind="kde", split_by="stand")
+
+    assert len(axes) == 2
+
+
+def test_kde_on_single_point_collection_does_not_raise():
+    collection = PitchCollection([_pitch(-0.4, 1.8, "R")])
+
+    ax = plot_zone(collection, kind="kde")
+
+    assert ax.get_xlim() is not None
+
+
+def test_unknown_kind_raises(mixed_stand_collection):
+    with pytest.raises(ValueError, match="Unknown plot kind"):
+        plot_zone(mixed_stand_collection, kind="not_a_real_kind")

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 Format based on Keep a Changelog.
 
+## [0.3.0] - 2026-08-08
+
+### Added
+
+- Optional local file cache for Baseball Savant game-feed responses, keyed by `game_pk`. Enable with `Pitcher.pitches(cache=True)` / `--cache` (or a custom directory via `cache="/some/dir"` / `--cache-dir`, defaulting to `~/.cache/mound`). Because a finished game's data never changes, repeat queries automatically fetch only games not already cached, with no separate "update" step needed.
+- `plot_zone(kind="kde")` renders a kernel density estimate instead of the plain 2D-histogram heatmap, for a smoother density surface on larger pitch samples. Requires the new optional `scipy` dependency (`pip install "mound[viz]"`); bandwidth is configurable via `bw_method`, exposed on the CLI as `mound zone --kind kde --bw-method`.
+- `Pitch.download_video()` / `PitchCollection.download_videos()` and the `mound video` CLI command download a pitch's Baseball Savant broadcast clip, resolved from its `pitch_id`. Captures the clip page's default embedded angle only (in practice, the home broadcast feed).
+
 ## [0.2.0] - 2026-08-08
 
 ### Added

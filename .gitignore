@@ -13,5 +13,6 @@ venv/
 htmlcov/
 examples/output/
 zone.png
+sandbox/
 .DS_Store
 .env

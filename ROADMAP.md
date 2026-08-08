@@ -19,7 +19,6 @@ Sensible next steps beyond the initial prototype, roughly grouped by theme. None
 
 ## Data and performance
 
-- **Caching.** Every call currently re-fetches from the MLB Stats API and Baseball Savant. A local cache (SQLite, on-disk JSON, or similar) keyed by `game_pk` would make repeated queries much faster and reduce load on both APIs.
 - **Bulk retrieval.** Efficient season- or team-wide retrieval (e.g. every pitch thrown by every Dodgers pitcher in 2025) rather than one pitcher at a time.
 - **S3 and other remote-storage targets.** `mound/export.py` already separates serialization from the `Storage` interface; adding `S3Storage` (or similar) should require no changes to the core data model.
 - **DataFrame/GeoDataFrame-friendly outputs.** `PitchCollection.to_frame()` already returns a pandas DataFrame; consider a GeoDataFrame variant for spatial analysis of pitch location.

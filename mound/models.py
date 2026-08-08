@@ -9,8 +9,12 @@ familiar names like ``"splitter"`` instead of memorizing Statcast codes.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+from typing import TYPE_CHECKING
 
 from mound.zone import is_in_zone
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Statcast pitch-type code -> canonical human-readable name.
 PITCH_TYPE_NAMES: dict[str, str] = {
@@ -162,6 +166,15 @@ class Pitch:
     @classmethod
     def field_names(cls) -> list[str]:
         return [f.name for f in fields(cls)]
+
+    def download_video(self, out: str | Path | None = None) -> Path:
+        """Download this pitch's Baseball Savant broadcast clip.
+
+        See :func:`mound.video.download_video`.
+        """
+        from mound.video import download_video
+
+        return download_video(self, out=out)
 
 
 # Savant `pitch_call` values that count as a strike for strike-rate purposes.

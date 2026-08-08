@@ -3,7 +3,7 @@
 from mound.pitches import PitchCollection, Pitcher
 from mound.players import AmbiguousPlayerError, Player, PlayerNotFoundError
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "Pitcher",

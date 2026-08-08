@@ -8,14 +8,35 @@ every batter faced.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from mound import config
 from mound.http import get_json
 from mound.models import Pitch, pitch_from_savant
 
+if TYPE_CHECKING:
+    from mound.cache import Cache
 
-def fetch_game_feed(game_pk: int) -> dict:
-    """Fetch the raw Baseball Savant game-feed payload for one game."""
-    return get_json(config.SAVANT_GAMEFEED_URL, params={"game_pk": game_pk})
+
+def fetch_game_feed(game_pk: int, cache: Cache | None = None) -> dict:
+    """Fetch the raw Baseball Savant game-feed payload for one game.
+
+    A finished game's feed never changes, so if ``cache`` is given and
+    already has an entry for ``game_pk``, it's returned without a network
+    call; otherwise the response is fetched and written to the cache.
+    """
+    cache_key = f"gf/{game_pk}"
+    if cache is not None:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    data = get_json(config.SAVANT_GAMEFEED_URL, params={"game_pk": game_pk})
+
+    if cache is not None:
+        cache.set(cache_key, data)
+
+    return data
 
 
 def _raw_pitches_for_pitcher(feed: dict, pitcher_id: int) -> list[dict]:
@@ -27,9 +48,11 @@ def _raw_pitches_for_pitcher(feed: dict, pitcher_id: int) -> list[dict]:
     return []
 
 
-def game_pitches_for_pitcher(game_pk: int, pitcher_id: int) -> list[Pitch]:
+def game_pitches_for_pitcher(
+    game_pk: int, pitcher_id: int, cache: Cache | None = None
+) -> list[Pitch]:
     """Fetch and normalize every pitch a given pitcher threw in one game."""
-    feed = fetch_game_feed(game_pk)
+    feed = fetch_game_feed(game_pk, cache=cache)
     game_date = feed.get("game_date")
     raw_pitches = _raw_pitches_for_pitcher(feed, pitcher_id)
 

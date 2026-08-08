@@ -1,8 +1,10 @@
 """Plot pitch locations against a theoretical strike zone.
 
-Kept to matplotlib alone (no seaborn/scipy) to minimize dependencies. Heat
-maps are built with a plain 2D histogram rather than a kernel density
-estimate, which is a reasonable tradeoff for a small pitch sample.
+Kept to matplotlib alone for the default path, to minimize dependencies.
+``kind="heatmap"`` bins pitches into a plain 2D histogram, a reasonable
+tradeoff for a small pitch sample; ``kind="kde"`` trades that simplicity for
+a smoother kernel density surface via the optional ``scipy`` dependency
+(``pip install "mound[viz]"``), better suited to larger samples.
 
 Chart chrome (typography, color, spacing) follows a few house rules: let the
 strike zone and the pitches carry the visual weight, keep structural
@@ -222,11 +224,55 @@ def _add_chrome(fig: Figure, headline: str, subtitle: str, source: str) -> None:
         fig.text(0.07, 0.02, source, fontsize=8.5, color=FAINT, ha="left", va="bottom")
 
 
-def _draw_panel(ax: Axes, df, kind: str, color_by: str | None) -> list[str]:
+def _draw_kde(ax: Axes, df, bw_method: float | str | None) -> None:
+    # A KDE needs real spread on both axes -- a single point, or points that
+    # are collinear on x or z, make gaussian_kde's covariance matrix
+    # singular. Fall back to drawing nothing rather than raising, matching
+    # the histogram branch's quiet no-op on an empty df.
+    if df.empty or len(df) < 2 or df["plate_x"].nunique() < 2 or df["plate_z"].nunique() < 2:
+        return
+
+    try:
+        from scipy.stats import gaussian_kde
+    except ImportError as exc:
+        raise ImportError(
+            "kind='kde' requires scipy. Install it with: pip install 'mound[viz]'"
+        ) from exc
+
+    kde = gaussian_kde(np.vstack([df["plate_x"], df["plate_z"]]), bw_method=bw_method)
+    xs = np.linspace(*PLOT_X_RANGE, 200)
+    zs = np.linspace(*PLOT_Z_RANGE, 200)
+    grid_x, grid_z = np.meshgrid(xs, zs)
+    density = kde(np.vstack([grid_x.ravel(), grid_z.ravel()])).reshape(grid_x.shape)
+
+    # A KDE surface has no true zeros to mask (unlike the histogram's empty
+    # bins), so the home plate/strike zone drawn underneath would otherwise
+    # be fully hidden under a wash of low-density color. Masking the faint
+    # tail below a small fraction of the peak keeps that same "figure over
+    # a transparent background" look as the heatmap.
+    masked = np.ma.masked_less(density, density.max() * 0.03)
+    image = ax.imshow(
+        masked,
+        origin="lower",
+        extent=[*PLOT_X_RANGE, *PLOT_Z_RANGE],
+        cmap="YlOrRd",
+        aspect="auto",
+        zorder=1,
+    )
+    cbar = ax.figure.colorbar(image, ax=ax, fraction=0.04, pad=0.06, shrink=0.85)
+    cbar.outline.set_visible(False)
+    cbar.set_ticks([density.min(), density.max()])
+    cbar.set_ticklabels(["Fewer", "More"])
+    cbar.ax.tick_params(length=0, labelsize=8.5, colors=FAINT)
+
+
+def _draw_panel(
+    ax: Axes, df, kind: str, color_by: str | None, bw_method: float | str | None = None
+) -> list[str]:
     """Draw pitch markers plus home plate and strike zone onto ``ax``.
 
     Returns the scatter group labels (for an optional legend key); empty
-    for heatmaps or single-color scatters.
+    for heatmaps/KDE surfaces or single-color scatters.
     """
     sz_top = df["sz_top"].mean() if not df.empty and df["sz_top"].notna().any() else DEFAULT_SZ_TOP
     sz_bot = df["sz_bot"].mean() if not df.empty and df["sz_bot"].notna().any() else DEFAULT_SZ_BOT
@@ -253,6 +299,8 @@ def _draw_panel(ax: Axes, df, kind: str, color_by: str | None) -> list[str]:
                 cbar.set_ticks([1, heatmap.max()])
                 cbar.set_ticklabels(["Fewer", "More"])
                 cbar.ax.tick_params(length=0, labelsize=8.5, colors=FAINT)
+    elif kind == "kde":
+        _draw_kde(ax, df, bw_method)
     elif kind == "scatter":
         if not df.empty and color_by and color_by in df.columns:
             counts = df[color_by].value_counts()
@@ -281,7 +329,7 @@ def _draw_panel(ax: Axes, df, kind: str, color_by: str | None) -> list[str]:
                 zorder=2,
             )
     else:
-        raise ValueError(f"Unknown plot kind: {kind!r} (expected 'scatter' or 'heatmap')")
+        raise ValueError(f"Unknown plot kind: {kind!r} (expected 'scatter', 'heatmap' or 'kde')")
 
     _draw_home_plate(ax)
     _draw_strike_zone(ax, sz_top, sz_bot)
@@ -300,6 +348,7 @@ def plot_zone(
     kind: str = "scatter",
     color_by: str | None = "pitch_type",
     split_by: str | None = None,
+    bw_method: float | str | None = None,
     ax: Axes | None = None,
     title: str | None = None,
     subtitle: str | None = None,
@@ -310,16 +359,21 @@ def plot_zone(
 
     Args:
         collection: pitches to plot.
-        kind: ``"scatter"`` for individual pitch points, or ``"heatmap"``
-            for a 2D-histogram density plot.
+        kind: ``"scatter"`` for individual pitch points, ``"heatmap"`` for
+            a 2D-histogram density plot, or ``"kde"`` for a smoother kernel
+            density estimate (requires the optional ``scipy`` dependency;
+            install with ``pip install "mound[viz]"``).
         color_by: column to color/group scatter points by (e.g.
-            ``"pitch_type"``); ignored for heatmaps. Pass ``None`` for a
+            ``"pitch_type"``); ignored for heatmaps/KDE. Pass ``None`` for a
             single color.
         split_by: column to facet into side-by-side panels, e.g.
             ``"stand"``/``"batter_stand"`` for a vs-lefties/vs-righties
             breakdown. One panel is drawn per non-null value present, each
             with its own strike zone and pitch count. Cannot be combined
             with an existing ``ax``.
+        bw_method: bandwidth passed through to ``scipy.stats.gaussian_kde``
+            when ``kind="kde"``; ignored otherwise. Defaults to scipy's own
+            heuristic (Scott's rule) when omitted.
         ax: existing matplotlib axes to draw on. A new, fully styled figure
             (with a headline, dek and source line) is created if omitted;
             when an existing ``ax`` is passed, only a left-aligned title is
@@ -339,7 +393,7 @@ def plot_zone(
         if ax is not None:
             raise ValueError("split_by cannot be combined with an existing ax")
         return _plot_zone_faceted(
-            collection, df, kind, color_by, split_by, title, subtitle, source, out
+            collection, df, kind, color_by, split_by, bw_method, title, subtitle, source, out
         )
 
     owns_figure = ax is None
@@ -351,7 +405,7 @@ def plot_zone(
         else:
             fig = ax.figure
 
-        group_labels = _draw_panel(ax, df, kind, color_by)
+        group_labels = _draw_panel(ax, df, kind, color_by, bw_method)
         if len(group_labels) > 1:
             _draw_legend_key(ax, group_labels)
         _finish_panel(ax)
@@ -375,6 +429,7 @@ def _plot_zone_faceted(
     kind: str,
     color_by: str | None,
     split_by: str,
+    bw_method: float | str | None,
     title: str | None,
     subtitle: str | None,
     source: str,
@@ -392,7 +447,7 @@ def _plot_zone_faceted(
 
         for i, (value, panel_ax) in enumerate(zip(values, axes, strict=True)):
             subset = df[df[column] == value]
-            group_labels = _draw_panel(panel_ax, subset, kind, color_by)
+            group_labels = _draw_panel(panel_ax, subset, kind, color_by, bw_method)
             if i == 0 and len(group_labels) > 1:
                 _draw_legend_key(panel_ax, group_labels)
             _finish_panel(panel_ax)
