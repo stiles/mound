@@ -1,0 +1,10 @@
+{
+  "copyright": "Copyright MLB Advanced Media, L.P.",
+  "stats": [
+    {
+      "type": { "displayName": "gameLog" },
+      "group": { "displayName": "pitching" },
+      "splits": []
+    }
+  ]
+}

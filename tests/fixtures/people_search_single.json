@@ -1,0 +1,15 @@
+{
+  "copyright": "Copyright MLB Advanced Media, L.P.",
+  "people": [
+    {
+      "id": 808963,
+      "fullName": "Roki Sasaki",
+      "firstName": "Roki",
+      "lastName": "Sasaki",
+      "active": true,
+      "currentTeam": { "id": 119, "name": "Los Angeles Dodgers" },
+      "primaryPosition": { "code": "1", "name": "Pitcher", "type": "Pitcher", "abbreviation": "P" },
+      "pitchHand": { "code": "R", "description": "Right" }
+    }
+  ]
+}

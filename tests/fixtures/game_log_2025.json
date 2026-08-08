@@ -1,0 +1,41 @@
+{
+  "copyright": "Copyright MLB Advanced Media, L.P.",
+  "stats": [
+    {
+      "type": { "displayName": "gameLog" },
+      "group": { "displayName": "pitching" },
+      "splits": [
+        {
+          "season": "2025",
+          "date": "2025-07-10",
+          "team": { "id": 119, "name": "Los Angeles Dodgers" },
+          "opponent": { "id": 109, "name": "Arizona Diamondbacks" },
+          "isHome": true,
+          "gameType": "R",
+          "stat": { "gamesStarted": 1, "numberOfPitches": 5 },
+          "game": { "gamePk": 1001 }
+        },
+        {
+          "season": "2025",
+          "date": "2025-08-01",
+          "team": { "id": 119, "name": "Los Angeles Dodgers" },
+          "opponent": { "id": 137, "name": "San Francisco Giants" },
+          "isHome": false,
+          "gameType": "R",
+          "stat": { "gamesStarted": 1, "numberOfPitches": 5 },
+          "game": { "gamePk": 1002 }
+        },
+        {
+          "season": "2025",
+          "date": "2025-08-15",
+          "team": { "id": 119, "name": "Los Angeles Dodgers" },
+          "opponent": { "id": 109, "name": "Arizona Diamondbacks" },
+          "isHome": true,
+          "gameType": "R",
+          "stat": { "gamesStarted": 1, "numberOfPitches": 6 },
+          "game": { "gamePk": 1003 }
+        }
+      ]
+    }
+  ]
+}

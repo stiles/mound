@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mound"
+version = "0.1.0"
+description = "A CLI and Python toolkit for acquiring, analyzing and visualizing MLB pitch-level data."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Matt Stiles" }]
+keywords = ["mlb", "baseball", "cli", "sports", "statcast", "pitching"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Science/Research",
+    "Environment :: Console",
+    "Topic :: Utilities",
+    "Topic :: Games/Entertainment",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "requests>=2.31",
+    "pandas>=2.0",
+    "matplotlib>=3.8",
+    "typer>=0.12",
+]
+
+[project.optional-dependencies]
+parquet = ["pyarrow>=14.0"]
+dev = ["pytest>=8.0", "responses>=0.25", "ruff>=0.6", "build>=1.0", "twine>=5.0"]
+
+[project.scripts]
+mound = "mound.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/stiles/mound"
+Repository = "https://github.com/stiles/mound"
+Issues = "https://github.com/stiles/mound/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mound"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
