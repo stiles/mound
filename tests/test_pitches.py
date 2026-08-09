@@ -108,6 +108,38 @@ def test_collection_filter_by_stand_is_alias_tolerant(mocked_responses):
     assert all(p.batter_stand == "R" for p in righties)
 
 
+def test_collection_filter_by_at_bat_number(mocked_responses):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    collection = Pitcher(808963).pitches(game=1001)
+    at_bat = collection.filter(at_bat_number=1)
+
+    assert len(at_bat) > 0
+    assert all(p.at_bat_number == 1 for p in at_bat)
+
+
+def test_collection_filter_by_at_bat_and_pitch_number_selects_one_pitch(mocked_responses):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    collection = Pitcher(808963).pitches(game=1001)
+    one_pitch = collection.filter(at_bat_number=1, pitch_number=2)
+
+    assert len(one_pitch) == 1
+    assert one_pitch.pitches[0].pitch_id == "1001-1-2"
+
+
+def test_pitches_at_bat_and_pitch_number_shortcuts_filter_at_retrieval(mocked_responses):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    collection = Pitcher(808963).pitches(game=1001, at_bat_number=1, pitch_number=2)
+
+    assert len(collection) == 1
+    assert collection.pitches[0].pitch_id == "1001-1-2"
+
+
 def test_empty_collection_has_no_pitches():
     from mound.pitches import PitchCollection
 

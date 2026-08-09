@@ -7,11 +7,15 @@
     mound zone "Roki Sasaki" --pitch splitter --last 4 --out zone.png
     mound zone "Roki Sasaki" --last 8 --split-by stand --out zone.png
     mound video "Roki Sasaki" --pitch splitter --last 4 --out-dir clips
+    mound video "Roki Sasaki" --pitch splitter --last 1 --limit 1
+    mound video "Roki Sasaki" --game 717404 --at-bat 34 --pitch-number 3
+    mound video-id 7468ecb9-0918-3aca-8ef5-6396e6ab80c3
 """
 
 from __future__ import annotations
 
 import pandas as pd
+import requests
 import typer
 
 from mound.pitches import PitchCollection, Pitcher
@@ -37,6 +41,14 @@ CACHE_DIR_OPTION = typer.Option(
 )
 
 
+AT_BAT_OPTION = typer.Option(
+    None, "--at-bat", help="A specific at-bat number (unique within --game, not across games)"
+)
+PITCH_NUMBER_OPTION = typer.Option(
+    None, "--pitch-number", help="A specific pitch number within that at-bat, e.g. 3 for the 0-2"
+)
+
+
 def _get_pitches(
     name: str,
     last: int | None,
@@ -45,6 +57,8 @@ def _get_pitches(
     game: int | None,
     pitch: str | None,
     stand: str | None = None,
+    at_bat_number: int | None = None,
+    pitch_number: int | None = None,
     cache: bool = False,
     cache_dir: str | None = None,
 ) -> PitchCollection:
@@ -63,6 +77,8 @@ def _get_pitches(
             game=game,
             pitch_type=pitch,
             stand=stand,
+            at_bat_number=at_bat_number,
+            pitch_number=pitch_number,
             cache=cache_dir if cache_dir else cache,
         )
     except Exception as exc:  # surface retrieval failures without a traceback
@@ -95,6 +111,8 @@ def pitches(
     game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
     pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
     stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
+    at_bat: int | None = AT_BAT_OPTION,
+    pitch_number: int | None = PITCH_NUMBER_OPTION,
     export_path: str | None = typer.Option(None, "--export", help="Path to export results to"),
     export_format: str | None = typer.Option(
         None, "--format", help="Export format (csv/json/parquet); inferred from --export if omitted"
@@ -104,7 +122,9 @@ def pitches(
     cache_dir: str | None = CACHE_DIR_OPTION,
 ) -> None:
     """Retrieve individual pitch records for a pitcher."""
-    collection = _get_pitches(name, last, since, until, game, pitch, stand, cache, cache_dir)
+    collection = _get_pitches(
+        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+    )
 
     if collection.empty:
         typer.echo("No pitches found for the given filters.")
@@ -138,11 +158,15 @@ def mix(
     game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
     pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
     stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
+    at_bat: int | None = AT_BAT_OPTION,
+    pitch_number: int | None = PITCH_NUMBER_OPTION,
     cache: bool = CACHE_OPTION,
     cache_dir: str | None = CACHE_DIR_OPTION,
 ) -> None:
     """Calculate a pitcher's pitch mix (usage percentage by pitch type)."""
-    collection = _get_pitches(name, last, since, until, game, pitch, stand, cache, cache_dir)
+    collection = _get_pitches(
+        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+    )
 
     if collection.empty:
         typer.echo("No pitches found for the given filters.")
@@ -162,11 +186,15 @@ def results(
     game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
     pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
     stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
+    at_bat: int | None = AT_BAT_OPTION,
+    pitch_number: int | None = PITCH_NUMBER_OPTION,
     cache: bool = CACHE_OPTION,
     cache_dir: str | None = CACHE_DIR_OPTION,
 ) -> None:
     """Show pitch counts, strikes/balls and strike rate, broken out by pitch type."""
-    collection = _get_pitches(name, last, since, until, game, pitch, stand, cache, cache_dir)
+    collection = _get_pitches(
+        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+    )
 
     if collection.empty:
         typer.echo("No pitches found for the given filters.")
@@ -196,6 +224,8 @@ def zone(
     game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
     pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
     stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
+    at_bat: int | None = AT_BAT_OPTION,
+    pitch_number: int | None = PITCH_NUMBER_OPTION,
     kind: str = typer.Option(
         "scatter", "--kind", help="'scatter', 'heatmap', or 'kde' (requires mound[viz])"
     ),
@@ -210,7 +240,9 @@ def zone(
     cache_dir: str | None = CACHE_DIR_OPTION,
 ) -> None:
     """Plot pitch locations against a theoretical strike zone."""
-    collection = _get_pitches(name, last, since, until, game, pitch, stand, cache, cache_dir)
+    collection = _get_pitches(
+        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+    )
 
     if collection.empty:
         _fail("No pitches found for the given filters.")
@@ -228,7 +260,12 @@ def video(
     game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
     pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
     stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
+    at_bat: int | None = AT_BAT_OPTION,
+    pitch_number: int | None = PITCH_NUMBER_OPTION,
     out_dir: str = typer.Option("videos", "--out-dir", help="Directory to save clips to"),
+    limit: int | None = typer.Option(
+        None, "--limit", help="Download at most N clips (e.g. --limit 1 for a single video)"
+    ),
     cache: bool = CACHE_OPTION,
     cache_dir: str | None = CACHE_DIR_OPTION,
 ) -> None:
@@ -236,17 +273,42 @@ def video(
 
     Only the clip page's default embedded angle is available this way (in
     practice, the home broadcast feed); pitches with no video coverage are
-    skipped with a warning rather than failing the whole batch.
+    skipped with a warning rather than failing the whole batch. Narrow to
+    one at-bat with --game/--at-bat, or to one exact pitch by adding
+    --pitch-number on top of that.
     """
     from mound.video import download_videos
 
-    collection = _get_pitches(name, last, since, until, game, pitch, stand, cache, cache_dir)
+    collection = _get_pitches(
+        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+    )
 
     if collection.empty:
         _fail("No pitches found for the given filters.")
 
+    if limit is not None:
+        collection = PitchCollection(collection.pitches[:limit], pitcher=collection.pitcher)
+
     saved = download_videos(collection, out_dir=out_dir)
     typer.echo(f"Saved {len(saved)} of {len(collection)} clip(s) to {out_dir}")
+
+
+@app.command(name="video-id")
+def video_id(
+    pitch_id: str = typer.Argument(..., help="A pitch_id/play_id, e.g. from a prior export"),
+    out: str | None = typer.Option(
+        None, "--out", help="Output file path (default: videos/<pitch_id>.mp4)"
+    ),
+) -> None:
+    """Download a single broadcast clip directly from its pitch_id, no pitcher lookup needed."""
+    from mound.video import VideoNotFoundError, download_video_by_id
+
+    try:
+        saved = download_video_by_id(pitch_id, out=out)
+    except (VideoNotFoundError, requests.RequestException) as exc:
+        _fail(f"Failed to download clip for pitch_id={pitch_id!r}: {exc}")
+
+    typer.echo(f"Saved clip to {saved}")
 
 
 if __name__ == "__main__":

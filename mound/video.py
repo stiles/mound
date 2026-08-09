@@ -62,6 +62,28 @@ def resolve_video_url(pitch_id: str) -> str:
     return mp4_url
 
 
+def download_video_by_id(pitch_id: str, out: str | Path | None = None) -> Path:
+    """Download a broadcast clip directly from its ``pitch_id``, with no ``Pitch`` needed.
+
+    Useful when you already have a ``pitch_id`` on hand (e.g. from an earlier
+    export) and don't want to re-retrieve the pitcher/game just to look up
+    the same pitch again. Defaults to ``videos/<pitch_id>.mp4`` when ``out``
+    is omitted.
+    """
+    if not pitch_id:
+        raise VideoNotFoundError("No pitch_id given to look up a clip for")
+
+    out_path = Path(out) if out is not None else Path("videos") / f"{pitch_id}.mp4"
+    mp4_url = resolve_video_url(pitch_id)
+
+    response = get_session().get(mp4_url, timeout=config.REQUEST_TIMEOUT)
+    response.raise_for_status()
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(response.content)
+    return out_path
+
+
 def download_video(pitch: Pitch, out: str | Path | None = None) -> Path:
     """Download one pitch's broadcast clip, returning the path it was saved to.
 
@@ -70,15 +92,7 @@ def download_video(pitch: Pitch, out: str | Path | None = None) -> Path:
     if not pitch.pitch_id:
         raise VideoNotFoundError("Pitch has no pitch_id to look up a clip for")
 
-    out_path = Path(out) if out is not None else Path("videos") / f"{pitch.pitch_id}.mp4"
-    mp4_url = resolve_video_url(pitch.pitch_id)
-
-    response = get_session().get(mp4_url, timeout=config.REQUEST_TIMEOUT)
-    response.raise_for_status()
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_bytes(response.content)
-    return out_path
+    return download_video_by_id(pitch.pitch_id, out=out)
 
 
 def download_videos(

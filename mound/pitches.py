@@ -95,6 +95,8 @@ class PitchCollection:
         *,
         pitch_type: str | list[str] | None = None,
         game: int | list[int] | None = None,
+        at_bat_number: int | list[int] | None = None,
+        pitch_number: int | list[int] | None = None,
         since: DateLike | None = None,
         until: DateLike | None = None,
         is_strike: bool | None = None,
@@ -108,6 +110,10 @@ class PitchCollection:
 
         ``stand`` filters by batter side, e.g. ``"L"``/``"left"``/``"LHB"``
         or ``"R"``/``"right"``/``"RHB"`` (case-insensitive).
+
+        ``at_bat_number`` is only unique within a single game, so pair it
+        with ``game`` to isolate one at-bat; add ``pitch_number`` on top of
+        that to narrow all the way down to one specific pitch.
         """
         pitches = self._pitches
 
@@ -119,6 +125,14 @@ class PitchCollection:
         if game is not None:
             wanted_games = {game} if isinstance(game, int) else set(game)
             pitches = [p for p in pitches if p.game_pk in wanted_games]
+
+        if at_bat_number is not None:
+            wanted_abs = {at_bat_number} if isinstance(at_bat_number, int) else set(at_bat_number)
+            pitches = [p for p in pitches if p.at_bat_number in wanted_abs]
+
+        if pitch_number is not None:
+            wanted_nums = {pitch_number} if isinstance(pitch_number, int) else set(pitch_number)
+            pitches = [p for p in pitches if p.pitch_number in wanted_nums]
 
         if since is not None:
             since_date = _as_date(since)
@@ -232,6 +246,8 @@ class Pitcher:
         game: int | list[int] | None = None,
         season: int | None = None,
         pitch_type: str | list[str] | None = None,
+        at_bat_number: int | list[int] | None = None,
+        pitch_number: int | list[int] | None = None,
         stand: str | None = None,
         cache: bool | str | Path | Cache | None = False,
     ) -> PitchCollection:
@@ -246,8 +262,11 @@ class Pitcher:
           ``"YYYY-MM-DD"`` strings or :class:`datetime.date` objects.
         - ``season``: a single MLB season, if no explicit dates are given.
 
-        ``pitch_type`` and ``stand`` are applied as post-retrieval filters
-        (see :meth:`PitchCollection.filter`).
+        ``pitch_type``, ``at_bat_number``, ``pitch_number`` and ``stand``
+        are applied as post-retrieval filters (see
+        :meth:`PitchCollection.filter`); pair ``game`` with ``at_bat_number``
+        (and ``pitch_number``, to land on one exact pitch) since an at-bat
+        number is only unique within a single game.
 
         ``cache`` enables a local file cache of Savant's per-game responses
         (disabled by default): ``True`` uses the default cache location,
@@ -296,6 +315,10 @@ class Pitcher:
         collection = PitchCollection(all_pitches, pitcher=self.player)
         if pitch_type is not None:
             collection = collection.filter(pitch_type=pitch_type)
+        if at_bat_number is not None:
+            collection = collection.filter(at_bat_number=at_bat_number)
+        if pitch_number is not None:
+            collection = collection.filter(pitch_number=pitch_number)
         if stand is not None:
             collection = collection.filter(stand=stand)
         return collection

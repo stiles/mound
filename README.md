@@ -62,6 +62,12 @@ mound pitches "Roki Sasaki" --last 4 --cache
 
 # Download broadcast clips for a set of pitches
 mound video "Roki Sasaki" --pitch splitter --last 4 --out-dir clips
+
+# Download just one clip
+mound video "Roki Sasaki" --pitch splitter --last 1 --limit 1
+
+# Already have a pitch_id? Download its clip directly, no lookup needed
+mound video-id 7468ecb9-0918-3aca-8ef5-6396e6ab80c3
 ```
 
 Run `mound --help` or `mound <command> --help` for the full option list.
@@ -100,6 +106,8 @@ splitters.download_videos(out_dir="clips")
 | `game` | one or more MLB `game_pk` values |
 | `pitch_type` | a pitch name, alias, or Statcast code (see below) |
 | `stand` | batter side: `"L"`/`"left"`/`"LHB"` or `"R"`/`"right"`/`"RHB"` |
+| `at_bat_number` | a specific at-bat — pair with `game`, since it's only unique within one game |
+| `pitch_number` | a specific pitch within that at-bat (e.g. `3` for the third pitch) — pair with `game` and `at_bat_number` to land on one exact pitch |
 
 Filtering a `PitchCollection` always returns another `PitchCollection`, so any combination of `.filter()`, `.pitch_mix()`, `.strike_rate()`, `.plot_zone()` and export methods composes freely.
 
@@ -193,10 +201,34 @@ Each pitch's `pitch_id` doubles as the `playId` on a Baseball Savant clip page, 
 ```python
 splitters.pitches[0].download_video()          # videos/<pitch_id>.mp4
 splitters.download_videos(out_dir="clips")      # every pitch in the collection
+
+# One specific at-bat, or one exact pitch within it
+game = roki.pitches(game=717404)
+at_bat = game.filter(at_bat_number=34)
+at_bat.download_videos(out_dir="clips")                     # every pitch of that at-bat
+at_bat.filter(pitch_number=3).pitches[0].download_video()   # just the 3rd pitch of it
+
+# Already have a pitch_id (e.g. from an earlier export)? Skip the
+# pitcher/game lookup entirely and download it directly
+from mound.video import download_video_by_id
+
+download_video_by_id("7468ecb9-0918-3aca-8ef5-6396e6ab80c3")
 ```
 
 ```bash
 mound video "Roki Sasaki" --pitch splitter --last 4 --out-dir clips
+
+# Just one clip: pass --limit to cap how many clips are downloaded
+mound video "Roki Sasaki" --pitch splitter --last 1 --limit 1
+
+# One specific at-bat (--at-bat is only unique within a --game), or one
+# exact pitch within it by adding --pitch-number on top
+mound video "Roki Sasaki" --game 823524 --at-bat 6 --out-dir clips
+mound video "Roki Sasaki" --game 823524 --at-bat 6 --pitch-number 3 --out-dir clips
+
+# Already have a pitch_id (e.g. from an earlier export)? Skip the
+# pitcher/game lookup entirely and download it directly
+mound video-id 7468ecb9-0918-3aca-8ef5-6396e6ab80c3
 ```
 
 Only the clip page's default embedded angle is captured this way (in practice, the home broadcast feed) — the page's away-broadcast toggle loads its clip via client-side JavaScript rather than a second tag in the page's HTML, so it isn't reachable with a plain request. Pitches with no video coverage are skipped with a warning by default; pass `skip_errors=False` to raise instead.

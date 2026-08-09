@@ -21,8 +21,9 @@ from typing import TYPE_CHECKING
 import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import LinearSegmentedColormap, PowerNorm
 from matplotlib.patches import Polygon, Rectangle
-from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import FuncFormatter, MaxNLocator
 
 from mound.zone import SZ_LEFT_FEET, SZ_RIGHT_FEET
 
@@ -69,6 +70,38 @@ PITCH_TYPE_COLORS: dict[str, str] = {
     "eephus": "#8E8E8E",
 }
 DEFAULT_PITCH_COLOR = "#4D4D4D"
+
+# Density surfaces (heatmap/KDE) share one on-brand warm gradient rather
+# than a generic named colormap like "YlOrRd" -- it ends in the same red
+# used for pitch-type markers elsewhere, so a density plot and a scatter
+# plot of the same pitches read as siblings rather than unrelated tools.
+DENSITY_CMAP = LinearSegmentedColormap.from_list(
+    "mound_density", ["#FFF9F0", "#FBDCB4", "#F5AE6B", "#F18851", "#C52622", "#6E0F0F"]
+)
+
+# A KDE's raw density values skew heavily toward the low end (a long, faint
+# tail surrounds any real cluster), which is exactly what made early
+# versions of this plot look like a diffuse, unfocused cloud. A super-linear
+# gamma pushes that tail further toward the background color and reserves
+# saturated color for the genuine peak, so the "hot zone" reads clearly at
+# a glance instead of the whole plot looking uniformly warm.
+KDE_GAMMA = 1.8
+
+# A fixed bandwidth factor (rather than scipy's default n-dependent Scott's
+# rule) keeps smoothing consistent across pitch counts. Scott's rule grows
+# the bandwidth as a sample shrinks to control estimator variance, which is
+# the right call for rigorous density estimation but looks wrong here --
+# a 5-pitch pitch type would get smoothed into one shapeless blob covering
+# most of the strike zone. This value was chosen by eye against real
+# samples ranging from 5 to 90+ pitches as the tightest setting that still
+# reads as one smooth surface rather than fragmenting into separate islands.
+KDE_DEFAULT_BW = 0.45
+
+# Below this fraction of the peak, a KDE surface is treated as background
+# and left transparent, so the home plate/strike zone drawn underneath
+# stays visible and the surface's edges look like a defined "figure" rather
+# than an amorphous cloud stretching to the plot's corners.
+KDE_MASK_FRACTION = 0.10
 
 # Human-readable panel titles for known ``split_by`` columns/values. Falls
 # back to ``str(value)`` for anything not listed here.
@@ -188,7 +221,19 @@ def _style_axes(ax: Axes) -> None:
         spine.set_visible(False)
     ax.tick_params(length=0, labelsize=9, colors=FAINT)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=4, integer=True))
-    ax.yaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
+
+    y_locator = MaxNLocator(nbins=5, integer=True)
+    ax.yaxis.set_major_locator(y_locator)
+    # There's no axis label to say these ticks are feet, so mark just the
+    # topmost one with a foot mark rather than repeating a unit on every
+    # tick (which would compete with the pitch data for attention).
+    ylim = ax.get_ylim()
+    visible_ticks = [t for t in y_locator.tick_values(*ylim) if ylim[0] <= t <= ylim[1]]
+    top_tick = max(visible_ticks) if visible_ticks else None
+    ax.yaxis.set_major_formatter(
+        FuncFormatter(lambda v, _pos: f"{v:g}\u2032" if v == top_tick else f"{v:g}")
+    )
+
     ax.set_xlabel("")
     ax.set_ylabel("")
 
@@ -239,7 +284,8 @@ def _draw_kde(ax: Axes, df, bw_method: float | str | None) -> None:
             "kind='kde' requires scipy. Install it with: pip install 'mound[viz]'"
         ) from exc
 
-    kde = gaussian_kde(np.vstack([df["plate_x"], df["plate_z"]]), bw_method=bw_method)
+    effective_bw = bw_method if bw_method is not None else KDE_DEFAULT_BW
+    kde = gaussian_kde(np.vstack([df["plate_x"], df["plate_z"]]), bw_method=effective_bw)
     xs = np.linspace(*PLOT_X_RANGE, 200)
     zs = np.linspace(*PLOT_Z_RANGE, 200)
     grid_x, grid_z = np.meshgrid(xs, zs)
@@ -248,22 +294,22 @@ def _draw_kde(ax: Axes, df, bw_method: float | str | None) -> None:
     # A KDE surface has no true zeros to mask (unlike the histogram's empty
     # bins), so the home plate/strike zone drawn underneath would otherwise
     # be fully hidden under a wash of low-density color. Masking the faint
-    # tail below a small fraction of the peak keeps that same "figure over
-    # a transparent background" look as the heatmap.
-    masked = np.ma.masked_less(density, density.max() * 0.03)
-    image = ax.imshow(
+    # tail below a fraction of the peak keeps that same "figure over a
+    # transparent background" look as the heatmap.
+    masked = np.ma.masked_less(density, density.max() * KDE_MASK_FRACTION)
+    ax.imshow(
         masked,
         origin="lower",
         extent=[*PLOT_X_RANGE, *PLOT_Z_RANGE],
-        cmap="YlOrRd",
+        cmap=DENSITY_CMAP,
+        norm=PowerNorm(gamma=KDE_GAMMA, vmin=density.min(), vmax=density.max()),
         aspect="auto",
         zorder=1,
     )
-    cbar = ax.figure.colorbar(image, ax=ax, fraction=0.04, pad=0.06, shrink=0.85)
-    cbar.outline.set_visible(False)
-    cbar.set_ticks([density.min(), density.max()])
-    cbar.set_ticklabels(["Fewer", "More"])
-    cbar.ax.tick_params(length=0, labelsize=8.5, colors=FAINT)
+    # No colorbar: a KDE's density values are an arbitrary scale (they
+    # integrate to 1 over the plane, not a pitch count), so a numeric or
+    # "Fewer"/"More" legend would either be meaningless or redundant with
+    # what the color itself already shows -- darker means more pitches.
 
 
 def _draw_panel(
@@ -289,7 +335,7 @@ def _draw_panel(
                 masked.T,
                 origin="lower",
                 extent=[*PLOT_X_RANGE, *PLOT_Z_RANGE],
-                cmap="YlOrRd",
+                cmap=DENSITY_CMAP,
                 aspect="auto",
                 zorder=1,
             )
@@ -372,8 +418,11 @@ def plot_zone(
             with its own strike zone and pitch count. Cannot be combined
             with an existing ``ax``.
         bw_method: bandwidth passed through to ``scipy.stats.gaussian_kde``
-            when ``kind="kde"``; ignored otherwise. Defaults to scipy's own
-            heuristic (Scott's rule) when omitted.
+            when ``kind="kde"``; ignored otherwise. Defaults to a fixed
+            factor (``KDE_DEFAULT_BW`` in ``mound/viz.py``) tuned for a
+            clearly defined "hot zone" rather than scipy's own default
+            (Scott's rule), which over-smooths small pitch samples into a
+            single shapeless blob.
         ax: existing matplotlib axes to draw on. A new, fully styled figure
             (with a headline, dek and source line) is created if omitted;
             when an existing ``ax`` is passed, only a left-aligned title is
