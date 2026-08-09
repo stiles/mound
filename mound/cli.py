@@ -4,6 +4,7 @@
     mound pitches "Roki Sasaki" --last 4 --pitch splitter
     mound mix "Roki Sasaki" --last 4
     mound results "Roki Sasaki" --last 4 --pitch splitter
+    mound arsenal "Roki Sasaki" --game 825051
     mound zone "Roki Sasaki" --pitch splitter --last 4 --out zone.png
     mound zone "Roki Sasaki" --last 8 --split-by stand --out zone.png
     mound video "Roki Sasaki" --pitch splitter --last 4 --out-dir clips
@@ -210,6 +211,41 @@ def results(
     summary["usage_rate"] = (summary["pitches"] / summary["pitches"].sum() * 100).round(1)
     summary = summary.sort_values("pitches", ascending=False)
     summary = summary[["pitches", "strikes", "balls", "strike_rate", "usage_rate"]]
+
+    with pd.option_context("display.float_format", "{:.1f}".format):
+        typer.echo(summary.to_string())
+
+
+@app.command()
+def arsenal(
+    name: str = typer.Argument(..., help="Pitcher name or MLB player ID"),
+    last: int | None = typer.Option(None, "--last", help="Most recent N appearances"),
+    since: str | None = typer.Option(None, "--since", help="Start date (YYYY-MM-DD)"),
+    until: str | None = typer.Option(None, "--until", help="End date (YYYY-MM-DD)"),
+    game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
+    pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
+    stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
+    at_bat: int | None = AT_BAT_OPTION,
+    pitch_number: int | None = PITCH_NUMBER_OPTION,
+    cache: bool = CACHE_OPTION,
+    cache_dir: str | None = CACHE_DIR_OPTION,
+) -> None:
+    """Show each pitch type's velocity, spin, movement and whiff rate side by side.
+
+    Meant for "how did this pitch look" questions -- run it once for a single
+    outing (--game) and once for a wider range (--last/--since) to see what
+    changed, e.g. a splitter's whiff rate or a four-seamer's spin rate.
+    """
+    collection = _get_pitches(
+        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+    )
+
+    if collection.empty:
+        typer.echo("No pitches found for the given filters.")
+        return
+
+    summary = collection.pitch_metrics()
+    summary["whiff_rate"] = collection.whiff_rate(by_pitch_type=True)
 
     with pd.option_context("display.float_format", "{:.1f}".format):
         typer.echo(summary.to_string())

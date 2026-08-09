@@ -50,6 +50,9 @@ mound pitches "Roki Sasaki" --last 4 --pitch splitter
 mound mix "Roki Sasaki" --last 4
 mound results "Roki Sasaki" --last 4 --pitch splitter
 
+# Velocity, spin, movement and whiff rate, side by side
+mound arsenal "Roki Sasaki" --game 825051
+
 # Plot pitch locations against the strike zone
 mound zone "Roki Sasaki" --pitch splitter --last 4 --out splitter_zone.png
 
@@ -84,7 +87,11 @@ splitters = pitches.filter(pitch_type="splitter")
 
 splitters.pitch_mix()
 splitters.strike_rate()
+splitters.swing_rate()
+splitters.whiff_rate()  # of swings, not of every pitch -- see below
 splitters.plot_zone(out="splitter_zone.png")
+
+pitches.pitch_metrics()  # avg velocity/spin/movement per pitch type
 
 pitches.to_csv("roki_last4.csv")
 
@@ -110,6 +117,36 @@ splitters.download_videos(out_dir="clips")
 | `pitch_number` | a specific pitch within that at-bat (e.g. `3` for the third pitch) — pair with `game` and `at_bat_number` to land on one exact pitch |
 
 Filtering a `PitchCollection` always returns another `PitchCollection`, so any combination of `.filter()`, `.pitch_mix()`, `.strike_rate()`, `.plot_zone()` and export methods composes freely.
+
+## Whiff rate and pitch metrics
+
+`swing_rate()` and `whiff_rate()` (each with a `by_pitch_type` option) answer "how nasty was it": whiff rate is the percentage of *swings* that missed, matching Baseball Savant's own convention — misses divided by swings, not by every pitch thrown, so a pitch rarely swung at can still post a high whiff rate on the swings it draws. `pitch_metrics()` averages velocity, spin rate and movement (`horizontal_break`, `induced_vertical_break`) per pitch type.
+
+Compare one outing against a wider window to see what stood out:
+
+```python
+last_start = roki.pitches(last=1)
+season = roki.pitches(since="2026-03-01")
+
+last_start.whiff_rate(by_pitch_type=True)["splitter"]  # nasty last night?
+season.whiff_rate(by_pitch_type=True)["splitter"]      # ...or business as usual?
+
+last_start.pitch_metrics().loc["four-seam fastball", "spin_rate"]  # spinning it more?
+season.pitch_metrics().loc["four-seam fastball", "spin_rate"]
+```
+
+The CLI's `mound arsenal` combines `pitch_metrics()` and `whiff_rate()` into one table:
+
+```bash
+mound arsenal "Roki Sasaki" --game 825051
+```
+
+```
+                    pitches  velocity  spin_rate  release_extension  horizontal_break  induced_vertical_break  whiff_rate
+pitch_type
+four-seam fastball       35      98.8     2427.1                7.1              11.2                    16.9        27.3
+splitter                 32      90.2      868.1                7.2               5.3                     1.0        13.6
+```
 
 ## Plots
 

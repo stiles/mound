@@ -38,6 +38,8 @@ def _pitch(plate_x, plate_z, batter_stand, pitch_type="four-seam fastball") -> P
         pitch_call="called_strike",
         call_description=None,
         is_strike=True,
+        is_swing=False,
+        is_whiff=False,
         at_bat_result=None,
         description=None,
     )

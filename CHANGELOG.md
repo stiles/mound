@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 Format based on Keep a Changelog.
 
+## [0.5.0] - 2026-08-09
+
+### Added
+
+- `Pitch` gains `spin_rate`, `release_extension`, `release_pos_x`, `release_pos_z`, `horizontal_break` and `induced_vertical_break`, parsed from fields Savant's `/gf` feed already returns but Mound wasn't yet surfacing. All default to `None` rather than raising when a pitch predates or otherwise lacks tracking coverage for them. Flow through automatically to `to_frame()`/CSV/JSON/Parquet export; no new fetch required.
+- `Pitch` gains `is_swing` and `is_whiff`, derived from `pitch_call` the same way `is_strike` already is. `PitchCollection.swing_rate()` and `.whiff_rate()` (each with a `by_pitch_type` option, matching `strike_rate()`) calculate the resulting percentages -- whiff rate is misses divided by swings, matching Baseball Savant's own convention, not misses divided by every pitch thrown.
+- `PitchCollection.pitch_metrics()` averages velocity, spin rate and movement by pitch type, using the fields above. Combined with `whiff_rate()` in the new `mound arsenal` CLI command, for questions like how nasty a pitch looked in one start (`--game`) versus across a season (`--last`/`--since`).
+
+### Changed
+
+- Adding `is_swing`/`is_whiff` shifts `at_bat_result` and `description` one position later in `Pitch`'s field order; only matters for code constructing a `Pitch` positionally rather than by keyword.
+
 ## [0.4.0] - 2026-08-09
 
 ### Added

@@ -34,7 +34,13 @@
         "pz": 2.5,
         "result": null,
         "des": null,
-        "game_pk": "1001"
+        "game_pk": "1001",
+        "spin_rate": 2450,
+        "extension": 6.7,
+        "x0": -1.6,
+        "z0": 5.9,
+        "breakX": 5.1,
+        "inducedBreakZ": 16.2
       },
       {
         "type": "pitch",

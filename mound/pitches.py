@@ -165,6 +165,21 @@ class PitchCollection:
 
         return strike_rate(self, by_pitch_type=by_pitch_type)
 
+    def swing_rate(self, by_pitch_type: bool = False) -> float | pd.Series:
+        from mound.analysis import swing_rate
+
+        return swing_rate(self, by_pitch_type=by_pitch_type)
+
+    def whiff_rate(self, by_pitch_type: bool = False) -> float | pd.Series:
+        from mound.analysis import whiff_rate
+
+        return whiff_rate(self, by_pitch_type=by_pitch_type)
+
+    def pitch_metrics(self, by_pitch_type: bool = True) -> pd.DataFrame | pd.Series:
+        from mound.analysis import pitch_metrics
+
+        return pitch_metrics(self, by_pitch_type=by_pitch_type)
+
     def usage_rate(self, by: str = "game_date") -> pd.DataFrame:
         from mound.analysis import usage_rate
 

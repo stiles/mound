@@ -19,6 +19,46 @@ def test_game_pitches_for_pitcher_normalizes_fields(mocked_responses):
     assert first.pitch_type == "four-seam fastball"
     assert first.velocity == 99.1
     assert first.is_strike is True  # called_strike counts as a strike
+    assert first.is_swing is False  # ...but a take, not a swing
+    assert first.is_whiff is False
+
+
+def test_game_pitches_for_pitcher_normalizes_swing_and_whiff(mocked_responses):
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    pitches = game_pitches_for_pitcher(1001, 808963)
+
+    assert pitches[1].pitch_call == "swinging_strike"
+    assert pitches[1].is_swing is True
+    assert pitches[1].is_whiff is True  # missed the ball entirely
+
+    assert pitches[3].pitch_call == "foul"
+    assert pitches[3].is_swing is True
+    assert pitches[3].is_whiff is False  # contact, just foul
+
+    assert pitches[2].pitch_call == "ball"
+    assert pitches[2].is_swing is False
+    assert pitches[2].is_whiff is False
+
+
+def test_game_pitches_for_pitcher_normalizes_movement_fields(mocked_responses):
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    pitches = game_pitches_for_pitcher(1001, 808963)
+
+    first = pitches[0]
+    assert first.spin_rate == 2450
+    assert first.release_extension == 6.7
+    assert first.release_pos_x == -1.6
+    assert first.release_pos_z == 5.9
+    assert first.horizontal_break == 5.1
+    assert first.induced_vertical_break == 16.2
+
+    # Fixtures without these keys should parse fine, just leaving them None
+    # rather than raising or defaulting to 0 -- e.g. older/untracked pitches.
+    second = pitches[1]
+    assert second.spin_rate is None
+    assert second.release_extension is None
 
 
 def test_game_pitches_for_pitcher_normalizes_batter_stand(mocked_responses):

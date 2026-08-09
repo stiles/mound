@@ -160,8 +160,21 @@ class Pitch:
     pitch_call: str | None
     call_description: str | None
     is_strike: bool | None
+    is_swing: bool | None
+    is_whiff: bool | None
     at_bat_result: str | None
     description: str | None
+
+    # Movement/release fields. Optional (default None) since Savant's own
+    # tracking coverage varies by season/park, unlike core fields like
+    # plate_x/plate_z; a None here means "not tracked for this pitch", not a
+    # parsing failure.
+    spin_rate: float | None = None  # rpm
+    release_extension: float | None = None  # feet, distance toward the plate at release
+    release_pos_x: float | None = None  # feet, horizontal release point (same axis as plate_x)
+    release_pos_z: float | None = None  # feet, release point height
+    horizontal_break: float | None = None  # inches, same axis/sign convention as plate_x
+    induced_vertical_break: float | None = None  # inches, vertical movement net of gravity
 
     @classmethod
     def field_names(cls) -> list[str]:
@@ -189,6 +202,19 @@ STRIKE_CALLS = {
     "missed_bunt",
     "bunt_foul_tip",
     "hit_into_play",
+}
+
+# Every strike call except a called strike requires the batter to have
+# swung, so this is just STRIKE_CALLS minus the one take.
+SWING_CALLS = STRIKE_CALLS - {"called_strike"}
+
+# Swings where the bat missed the ball entirely -- a foul (including a
+# foul tip, which is still contact) isn't a whiff, but a missed bunt
+# attempt is.
+WHIFF_CALLS = {
+    "swinging_strike",
+    "swinging_strike_blocked",
+    "missed_bunt",
 }
 
 
@@ -229,6 +255,14 @@ def pitch_from_savant(raw: dict) -> Pitch:
         pitch_call=pitch_call,
         call_description=raw.get("call_name") or raw.get("description"),
         is_strike=(pitch_call in STRIKE_CALLS) if pitch_call is not None else None,
+        is_swing=(pitch_call in SWING_CALLS) if pitch_call is not None else None,
+        is_whiff=(pitch_call in WHIFF_CALLS) if pitch_call is not None else None,
         at_bat_result=raw.get("result"),
         description=raw.get("des"),
+        spin_rate=raw.get("spin_rate"),
+        release_extension=raw.get("extension"),
+        release_pos_x=raw.get("x0"),
+        release_pos_z=raw.get("z0"),
+        horizontal_break=raw.get("breakX"),
+        induced_vertical_break=raw.get("inducedBreakZ"),
     )

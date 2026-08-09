@@ -36,6 +36,8 @@ def _sample_collection() -> PitchCollection:
         pitch_call="swinging_strike",
         call_description="Swinging Strike",
         is_strike=True,
+        is_swing=True,
+        is_whiff=True,
         at_bat_result=None,
         description=None,
     )

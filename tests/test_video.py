@@ -52,6 +52,8 @@ def _pitch(pitch_id: str | None) -> Pitch:
         pitch_call="ball",
         call_description="Ball",
         is_strike=False,
+        is_swing=False,
+        is_whiff=False,
         at_bat_result=None,
         description=None,
     )

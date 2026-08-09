@@ -5,9 +5,8 @@ Sensible next steps beyond the initial prototype, roughly grouped by theme. None
 ## More analysis
 
 - **Batter filtering and matchups.** Filter a pitcher's pitches by opposing batter, and support the inverse (a batter's pitches faced from a given pitcher) for pitcher-vs-batter matchup views.
-- **Velocity, spin, movement and release-point analysis.** Mound already captures `velocity`, `sz_top`/`sz_bot` and raw Statcast fields aren't currently normalized (spin rate, horizontal/vertical break, extension, release point). Surface these as first-class `Pitch` fields and add summary functions (e.g. average spin by pitch type).
-- **Swing, whiff and chase rates.** Savant's raw pitch data includes swing/contact info; add derived rate metrics beyond strike rate (whiff rate, chase rate on pitches outside the zone, contact rate).
-- **Called-strike and whiff rate.** A more granular breakdown of `strike_rate()` into called strikes vs. swinging strikes vs. fouls.
+- **Chase rate.** Swing rate specifically on pitches outside the zone (pairs naturally with `in_zone`) — the counterpart to `swing_rate()`/`whiff_rate()`, which cover swings generally.
+- **Called-strike breakdown.** A more granular breakdown of `strike_rate()` into called strikes vs. swinging strikes vs. fouls.
 - **Game-to-game comparisons.** Build on `usage_rate()` to add e.g. `compare(collection_a, collection_b)` helpers that diff pitch mix, strike rate and location between two periods (the "pre vs. post All-Star break" pattern from the original example question).
 - **Automatic pitch-type normalization.** Statcast's own classification can be inconsistent game-to-game for pitches with unusual movement (see the Roki Sasaki splitter/forkball note in the README). A normalization layer could reconcile a pitcher's pitch types across a season using movement/velocity clustering rather than trusting each game's raw label.
 
