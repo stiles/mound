@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated, NoReturn
+
 import pandas as pd
 import requests
 import typer
@@ -29,29 +31,48 @@ app = typer.Typer(
 )
 
 
-def _fail(message: str) -> None:
+def _fail(message: str) -> NoReturn:
     typer.secho(message, fg=typer.colors.RED, err=True)
     raise typer.Exit(code=1)
 
 
-CACHE_OPTION = typer.Option(
-    False, "--cache", help="Cache Savant game-feed responses locally to speed up repeat queries"
-)
-CACHE_DIR_OPTION = typer.Option(
-    None, "--cache-dir", help="Custom cache directory (implies --cache)"
-)
-
-
-AT_BAT_OPTION = typer.Option(
-    None, "--at-bat", help="A specific at-bat number (unique within --game, not across games)"
-)
-PITCH_NUMBER_OPTION = typer.Option(
-    None, "--pitch-number", help="A specific pitch number within that at-bat, e.g. 3 for the 0-2"
-)
+# Shared filter options, reused across every pitch-retrieval command below.
+# Centralizing each flag's name/help text here means every command stays in
+# sync automatically instead of five near-identical `typer.Option(...)` calls
+# drifting apart over time.
+LastOption = Annotated[int | None, typer.Option("--last", help="Most recent N appearances")]
+SinceOption = Annotated[str | None, typer.Option("--since", help="Start date (YYYY-MM-DD)")]
+UntilOption = Annotated[str | None, typer.Option("--until", help="End date (YYYY-MM-DD)")]
+GameOption = Annotated[int | None, typer.Option("--game", help="A specific MLB game_pk")]
+PitchOption = Annotated[str | None, typer.Option("--pitch", help="Pitch type, e.g. 'splitter'")]
+StandOption = Annotated[str | None, typer.Option("--stand", help="Batter side ('L' or 'R')")]
+AtBatOption = Annotated[
+    int | None,
+    typer.Option(
+        "--at-bat", help="A specific at-bat number (unique within --game, not across games)"
+    ),
+]
+PitchNumberOption = Annotated[
+    int | None,
+    typer.Option(
+        "--pitch-number",
+        help="A specific pitch number within that at-bat, e.g. 3 for the 0-2",
+    ),
+]
+CacheOption = Annotated[
+    bool,
+    typer.Option(
+        "--cache", help="Cache Savant game-feed responses locally to speed up repeat queries"
+    ),
+]
+CacheDirOption = Annotated[
+    str | None, typer.Option("--cache-dir", help="Custom cache directory (implies --cache)")
+]
 
 
 def _get_pitches(
     name: str,
+    *,
     last: int | None,
     since: str | None,
     until: str | None,
@@ -106,25 +127,35 @@ def search(
 @app.command()
 def pitches(
     name: str = typer.Argument(..., help="Pitcher name or MLB player ID"),
-    last: int | None = typer.Option(None, "--last", help="Most recent N appearances"),
-    since: str | None = typer.Option(None, "--since", help="Start date (YYYY-MM-DD)"),
-    until: str | None = typer.Option(None, "--until", help="End date (YYYY-MM-DD)"),
-    game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
-    pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
-    stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
-    at_bat: int | None = AT_BAT_OPTION,
-    pitch_number: int | None = PITCH_NUMBER_OPTION,
+    last: LastOption = None,
+    since: SinceOption = None,
+    until: UntilOption = None,
+    game: GameOption = None,
+    pitch: PitchOption = None,
+    stand: StandOption = None,
+    at_bat: AtBatOption = None,
+    pitch_number: PitchNumberOption = None,
     export_path: str | None = typer.Option(None, "--export", help="Path to export results to"),
     export_format: str | None = typer.Option(
         None, "--format", help="Export format (csv/json/parquet); inferred from --export if omitted"
     ),
     limit: int | None = typer.Option(20, "--limit", help="Rows to print (use 0 for all)"),
-    cache: bool = CACHE_OPTION,
-    cache_dir: str | None = CACHE_DIR_OPTION,
+    cache: CacheOption = False,
+    cache_dir: CacheDirOption = None,
 ) -> None:
     """Retrieve individual pitch records for a pitcher."""
     collection = _get_pitches(
-        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+        name,
+        last=last,
+        since=since,
+        until=until,
+        game=game,
+        pitch=pitch,
+        stand=stand,
+        at_bat_number=at_bat,
+        pitch_number=pitch_number,
+        cache=cache,
+        cache_dir=cache_dir,
     )
 
     if collection.empty:
@@ -153,20 +184,30 @@ def pitches(
 @app.command()
 def mix(
     name: str = typer.Argument(..., help="Pitcher name or MLB player ID"),
-    last: int | None = typer.Option(None, "--last", help="Most recent N appearances"),
-    since: str | None = typer.Option(None, "--since", help="Start date (YYYY-MM-DD)"),
-    until: str | None = typer.Option(None, "--until", help="End date (YYYY-MM-DD)"),
-    game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
-    pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
-    stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
-    at_bat: int | None = AT_BAT_OPTION,
-    pitch_number: int | None = PITCH_NUMBER_OPTION,
-    cache: bool = CACHE_OPTION,
-    cache_dir: str | None = CACHE_DIR_OPTION,
+    last: LastOption = None,
+    since: SinceOption = None,
+    until: UntilOption = None,
+    game: GameOption = None,
+    pitch: PitchOption = None,
+    stand: StandOption = None,
+    at_bat: AtBatOption = None,
+    pitch_number: PitchNumberOption = None,
+    cache: CacheOption = False,
+    cache_dir: CacheDirOption = None,
 ) -> None:
     """Calculate a pitcher's pitch mix (usage percentage by pitch type)."""
     collection = _get_pitches(
-        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+        name,
+        last=last,
+        since=since,
+        until=until,
+        game=game,
+        pitch=pitch,
+        stand=stand,
+        at_bat_number=at_bat,
+        pitch_number=pitch_number,
+        cache=cache,
+        cache_dir=cache_dir,
     )
 
     if collection.empty:
@@ -181,20 +222,30 @@ def mix(
 @app.command()
 def results(
     name: str = typer.Argument(..., help="Pitcher name or MLB player ID"),
-    last: int | None = typer.Option(None, "--last", help="Most recent N appearances"),
-    since: str | None = typer.Option(None, "--since", help="Start date (YYYY-MM-DD)"),
-    until: str | None = typer.Option(None, "--until", help="End date (YYYY-MM-DD)"),
-    game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
-    pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
-    stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
-    at_bat: int | None = AT_BAT_OPTION,
-    pitch_number: int | None = PITCH_NUMBER_OPTION,
-    cache: bool = CACHE_OPTION,
-    cache_dir: str | None = CACHE_DIR_OPTION,
+    last: LastOption = None,
+    since: SinceOption = None,
+    until: UntilOption = None,
+    game: GameOption = None,
+    pitch: PitchOption = None,
+    stand: StandOption = None,
+    at_bat: AtBatOption = None,
+    pitch_number: PitchNumberOption = None,
+    cache: CacheOption = False,
+    cache_dir: CacheDirOption = None,
 ) -> None:
     """Show pitch counts, strikes/balls and strike rate, broken out by pitch type."""
     collection = _get_pitches(
-        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+        name,
+        last=last,
+        since=since,
+        until=until,
+        game=game,
+        pitch=pitch,
+        stand=stand,
+        at_bat_number=at_bat,
+        pitch_number=pitch_number,
+        cache=cache,
+        cache_dir=cache_dir,
     )
 
     if collection.empty:
@@ -219,16 +270,16 @@ def results(
 @app.command()
 def arsenal(
     name: str = typer.Argument(..., help="Pitcher name or MLB player ID"),
-    last: int | None = typer.Option(None, "--last", help="Most recent N appearances"),
-    since: str | None = typer.Option(None, "--since", help="Start date (YYYY-MM-DD)"),
-    until: str | None = typer.Option(None, "--until", help="End date (YYYY-MM-DD)"),
-    game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
-    pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
-    stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
-    at_bat: int | None = AT_BAT_OPTION,
-    pitch_number: int | None = PITCH_NUMBER_OPTION,
-    cache: bool = CACHE_OPTION,
-    cache_dir: str | None = CACHE_DIR_OPTION,
+    last: LastOption = None,
+    since: SinceOption = None,
+    until: UntilOption = None,
+    game: GameOption = None,
+    pitch: PitchOption = None,
+    stand: StandOption = None,
+    at_bat: AtBatOption = None,
+    pitch_number: PitchNumberOption = None,
+    cache: CacheOption = False,
+    cache_dir: CacheDirOption = None,
 ) -> None:
     """Show each pitch type's velocity, spin, movement and whiff rate side by side.
 
@@ -237,7 +288,17 @@ def arsenal(
     changed, e.g. a splitter's whiff rate or a four-seamer's spin rate.
     """
     collection = _get_pitches(
-        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+        name,
+        last=last,
+        since=since,
+        until=until,
+        game=game,
+        pitch=pitch,
+        stand=stand,
+        at_bat_number=at_bat,
+        pitch_number=pitch_number,
+        cache=cache,
+        cache_dir=cache_dir,
     )
 
     if collection.empty:
@@ -254,14 +315,14 @@ def arsenal(
 @app.command()
 def zone(
     name: str = typer.Argument(..., help="Pitcher name or MLB player ID"),
-    last: int | None = typer.Option(None, "--last", help="Most recent N appearances"),
-    since: str | None = typer.Option(None, "--since", help="Start date (YYYY-MM-DD)"),
-    until: str | None = typer.Option(None, "--until", help="End date (YYYY-MM-DD)"),
-    game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
-    pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
-    stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
-    at_bat: int | None = AT_BAT_OPTION,
-    pitch_number: int | None = PITCH_NUMBER_OPTION,
+    last: LastOption = None,
+    since: SinceOption = None,
+    until: UntilOption = None,
+    game: GameOption = None,
+    pitch: PitchOption = None,
+    stand: StandOption = None,
+    at_bat: AtBatOption = None,
+    pitch_number: PitchNumberOption = None,
     kind: str = typer.Option(
         "scatter", "--kind", help="'scatter', 'heatmap', or 'kde' (requires mound[viz])"
     ),
@@ -272,12 +333,22 @@ def zone(
         None, "--bw-method", help="Bandwidth for --kind kde (default: scipy's own heuristic)"
     ),
     out: str = typer.Option("zone.png", "--out", help="Output image path"),
-    cache: bool = CACHE_OPTION,
-    cache_dir: str | None = CACHE_DIR_OPTION,
+    cache: CacheOption = False,
+    cache_dir: CacheDirOption = None,
 ) -> None:
     """Plot pitch locations against a theoretical strike zone."""
     collection = _get_pitches(
-        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+        name,
+        last=last,
+        since=since,
+        until=until,
+        game=game,
+        pitch=pitch,
+        stand=stand,
+        at_bat_number=at_bat,
+        pitch_number=pitch_number,
+        cache=cache,
+        cache_dir=cache_dir,
     )
 
     if collection.empty:
@@ -290,20 +361,20 @@ def zone(
 @app.command()
 def video(
     name: str = typer.Argument(..., help="Pitcher name or MLB player ID"),
-    last: int | None = typer.Option(None, "--last", help="Most recent N appearances"),
-    since: str | None = typer.Option(None, "--since", help="Start date (YYYY-MM-DD)"),
-    until: str | None = typer.Option(None, "--until", help="End date (YYYY-MM-DD)"),
-    game: int | None = typer.Option(None, "--game", help="A specific MLB game_pk"),
-    pitch: str | None = typer.Option(None, "--pitch", help="Pitch type, e.g. 'splitter'"),
-    stand: str | None = typer.Option(None, "--stand", help="Batter side ('L' or 'R')"),
-    at_bat: int | None = AT_BAT_OPTION,
-    pitch_number: int | None = PITCH_NUMBER_OPTION,
+    last: LastOption = None,
+    since: SinceOption = None,
+    until: UntilOption = None,
+    game: GameOption = None,
+    pitch: PitchOption = None,
+    stand: StandOption = None,
+    at_bat: AtBatOption = None,
+    pitch_number: PitchNumberOption = None,
     out_dir: str = typer.Option("videos", "--out-dir", help="Directory to save clips to"),
     limit: int | None = typer.Option(
         None, "--limit", help="Download at most N clips (e.g. --limit 1 for a single video)"
     ),
-    cache: bool = CACHE_OPTION,
-    cache_dir: str | None = CACHE_DIR_OPTION,
+    cache: CacheOption = False,
+    cache_dir: CacheDirOption = None,
 ) -> None:
     """Download Baseball Savant broadcast clips for a pitcher's pitches.
 
@@ -316,14 +387,24 @@ def video(
     from mound.video import download_videos
 
     collection = _get_pitches(
-        name, last, since, until, game, pitch, stand, at_bat, pitch_number, cache, cache_dir
+        name,
+        last=last,
+        since=since,
+        until=until,
+        game=game,
+        pitch=pitch,
+        stand=stand,
+        at_bat_number=at_bat,
+        pitch_number=pitch_number,
+        cache=cache,
+        cache_dir=cache_dir,
     )
 
     if collection.empty:
         _fail("No pitches found for the given filters.")
 
     if limit is not None:
-        collection = PitchCollection(collection.pitches[:limit], pitcher=collection.pitcher)
+        collection = collection.limit(limit)
 
     saved = download_videos(collection, out_dir=out_dir)
     typer.echo(f"Saved {len(saved)} of {len(collection)} clip(s) to {out_dir}")

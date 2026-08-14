@@ -154,6 +154,10 @@ class PitchCollection:
 
         return PitchCollection(pitches, pitcher=self.pitcher)
 
+    def limit(self, n: int) -> PitchCollection:
+        """Return a new :class:`PitchCollection` capped to its first ``n`` pitches."""
+        return PitchCollection(self._pitches[:n], pitcher=self.pitcher)
+
     # -- analysis -----------------------------------------------------
     def pitch_mix(self) -> pd.Series:
         from mound.analysis import pitch_mix

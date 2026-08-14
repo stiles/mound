@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 Format based on Keep a Changelog.
 
+## [0.5.1] - 2026-08-13
+
+### Changed
+
+- Consolidated the CLI's repeated `--last`/`--since`/`--until`/`--game`/`--pitch`/`--stand`/`--at-bat`/`--pitch-number`/`--cache`/`--cache-dir` option declarations, previously duplicated across `pitches`, `mix`, `results`, `arsenal`, `zone` and `video`, into shared `Annotated` type aliases in `mound/cli.py` -- each flag's name and help text now live in one place instead of five.
+- `_get_pitches()`'s internal helper is now keyword-only, closing off the possibility of a silent argument-order mistake at a call site.
+- `video --limit` now goes through a new `PitchCollection.limit()` method instead of constructing a `PitchCollection` directly from another collection's internals.
+- `_fail()` is now typed `-> NoReturn`, making explicit (for both readers and type checkers) that it always exits rather than returning.
+
 ## [0.5.0] - 2026-08-09
 
 ### Added
