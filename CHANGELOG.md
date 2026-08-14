@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 Format based on Keep a Changelog.
 
+## [0.6.0] - 2026-08-13
+
+### Added
+
+- `mound --version` prints the installed CLI's version and exits, so you can check what you have installed without dropping into Python.
+
 ## [0.5.1] - 2026-08-13
 
 ### Changed

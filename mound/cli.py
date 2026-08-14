@@ -21,6 +21,7 @@ import pandas as pd
 import requests
 import typer
 
+from mound import __version__
 from mound.pitches import PitchCollection, Pitcher
 from mound.players import AmbiguousPlayerError, PlayerNotFoundError
 
@@ -34,6 +35,27 @@ app = typer.Typer(
 def _fail(message: str) -> NoReturn:
     typer.secho(message, fg=typer.colors.RED, err=True)
     raise typer.Exit(code=1)
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"mound {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show mound's version and exit.",
+        ),
+    ] = False,
+) -> None:
+    pass
 
 
 # Shared filter options, reused across every pitch-retrieval command below.
