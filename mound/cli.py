@@ -29,6 +29,10 @@ app = typer.Typer(
     name="mound",
     help="Retrieve, analyze and visualize MLB pitch-level data.",
     no_args_is_help=True,
+    # Don't dump every local variable (e.g. a full pitch DataFrame) into an
+    # unhandled exception's traceback -- that's noise for a CLI user, not a
+    # helpful debugging aid.
+    pretty_exceptions_show_locals=False,
 )
 
 
@@ -199,7 +203,10 @@ def pitches(
         typer.echo(f"\n{len(collection)} pitch(es) total.")
 
     if export_path:
-        collection.export(export_path, format=export_format)
+        try:
+            collection.export(export_path, format=export_format)
+        except OSError as exc:
+            _fail(f"Could not export to {export_path!r}: {exc.strerror or exc}")
         typer.echo(f"Exported {len(collection)} pitch(es) to {export_path}")
 
 
@@ -376,7 +383,10 @@ def zone(
     if collection.empty:
         _fail("No pitches found for the given filters.")
 
-    collection.plot_zone(kind=kind, split_by=split_by, bw_method=bw_method, out=out)
+    try:
+        collection.plot_zone(kind=kind, split_by=split_by, bw_method=bw_method, out=out)
+    except OSError as exc:
+        _fail(f"Could not save plot to {out!r}: {exc.strerror or exc}")
     typer.echo(f"Saved plot of {len(collection)} pitch(es) to {out}")
 
 
@@ -428,7 +438,10 @@ def video(
     if limit is not None:
         collection = collection.limit(limit)
 
-    saved = download_videos(collection, out_dir=out_dir)
+    try:
+        saved = download_videos(collection, out_dir=out_dir)
+    except OSError as exc:
+        _fail(f"Could not save clips to {out_dir!r}: {exc.strerror or exc}")
     typer.echo(f"Saved {len(saved)} of {len(collection)} clip(s) to {out_dir}")
 
 
@@ -446,6 +459,8 @@ def video_id(
         saved = download_video_by_id(pitch_id, out=out)
     except (VideoNotFoundError, requests.RequestException) as exc:
         _fail(f"Failed to download clip for pitch_id={pitch_id!r}: {exc}")
+    except OSError as exc:
+        _fail(f"Could not save clip to {out!r}: {exc.strerror or exc}")
 
     typer.echo(f"Saved clip to {saved}")
 

@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 Format based on Keep a Changelog.
 
+## [0.6.1] - 2026-08-13
+
+### Fixed
+
+- `mound zone --out` now creates missing parent directories before saving, matching how `--export` and `video --out-dir` already behave, instead of raising a raw `FileNotFoundError`.
+- CLI commands no longer dump a full traceback (including every local variable, e.g. an entire pitch DataFrame) for an unwritable `--out`/`--out-dir`/`--export` path; `zone`, `pitches --export`, `video` and `video-id` now fail with one clear line instead.
+
 ## [0.6.0] - 2026-08-13
 
 ### Added

@@ -16,6 +16,7 @@ titles or a boxed legend.
 from __future__ import annotations
 
 from datetime import date, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import matplotlib.patheffects as path_effects
@@ -467,6 +468,7 @@ def plot_zone(
             ax.set_title(headline, loc="left", fontsize=12, fontweight="semibold", color=INK)
 
         if out:
+            Path(out).parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(out, dpi=200, bbox_inches="tight", pad_inches=0.2)
 
     return ax
@@ -513,6 +515,7 @@ def _plot_zone_faceted(
         _add_chrome(fig, headline, dek, source)
 
         if out:
+            Path(out).parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(out, dpi=200, bbox_inches="tight", pad_inches=0.2)
 
     return axes
