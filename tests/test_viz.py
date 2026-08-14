@@ -4,11 +4,14 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+from dataclasses import replace
+
 import pytest
 
 from mound.models import Pitch
 from mound.pitches import PitchCollection
-from mound.viz import plot_zone
+from mound.players import Player
+from mound.viz import _default_headline, _default_subtitle, plot_zone
 
 
 def _pitch(plate_x, plate_z, batter_stand, pitch_type="four-seam fastball") -> Pitch:
@@ -149,3 +152,53 @@ def test_kde_on_single_point_collection_does_not_raise():
 def test_unknown_kind_raises(mixed_stand_collection):
     with pytest.raises(ValueError, match="Unknown plot kind"):
         plot_zone(mixed_stand_collection, kind="not_a_real_kind")
+
+
+def _roki() -> Player:
+    return Player(id=808963, full_name="Roki Sasaki", primary_position="Pitcher")
+
+
+def _hitter() -> Player:
+    return Player(id=1, full_name="Test Batter", primary_position="Shortstop")
+
+
+def test_headline_names_the_pitcher(mixed_stand_collection):
+    collection = PitchCollection(mixed_stand_collection.pitches, pitcher=_roki())
+
+    headline = _default_headline(collection, collection.to_frame())
+
+    assert headline == "Roki Sasaki\u2019s four-seam fastball locations"
+
+
+def test_headline_for_pitches_faced_names_the_hitter_as_the_target(mixed_stand_collection):
+    collection = PitchCollection(mixed_stand_collection.pitches, batter=_hitter())
+
+    headline = _default_headline(collection, collection.to_frame())
+
+    assert headline == "Four-seam fastball locations to Test Batter"
+
+
+def test_subtitle_flags_a_one_batter_matchup(mixed_stand_collection):
+    collection = PitchCollection(mixed_stand_collection.pitches, pitcher=_roki())
+
+    subtitle = _default_subtitle(collection, collection.to_frame())
+
+    assert "vs. Test Batter" in subtitle
+
+
+def test_subtitle_leaves_out_the_batter_when_several_were_faced(mixed_stand_collection):
+    pitches = mixed_stand_collection.pitches
+    pitches[0] = replace(pitches[0], batter_id=2, batter_name="Another Batter")
+    collection = PitchCollection(pitches, pitcher=_roki())
+
+    subtitle = _default_subtitle(collection, collection.to_frame())
+
+    assert "vs." not in subtitle
+
+
+def test_subtitle_does_not_repeat_a_hitter_already_in_the_headline(mixed_stand_collection):
+    collection = PitchCollection(mixed_stand_collection.pitches, batter=_hitter())
+
+    subtitle = _default_subtitle(collection, collection.to_frame())
+
+    assert "vs." not in subtitle

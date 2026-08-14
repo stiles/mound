@@ -165,6 +165,61 @@ def test_swing_rate_empty_collection():
     assert math.isnan(PitchCollection().swing_rate())
 
 
+def test_chase_rate_only_counts_pitches_outside_the_zone():
+    # 4 out of the zone (1 chased) + 4 in the zone (3 swung at) -- chase rate
+    # should be 25% of the out-of-zone pitches, not 50% of all 8.
+    pitches = (
+        [_pitch("FS", "splitter", False, in_zone=False, is_swing=True)]
+        + [_pitch("FS", "splitter", False, in_zone=False, is_swing=False) for _ in range(3)]
+        + [_pitch("FF", "four-seam fastball", True, in_zone=True, is_swing=True) for _ in range(3)]
+        + [_pitch("FF", "four-seam fastball", True, in_zone=True, is_swing=False)]
+    )
+    collection = PitchCollection(pitches)
+
+    assert collection.chase_rate() == 25.0
+
+
+def test_chase_rate_by_pitch_type():
+    pitches = [
+        _pitch("FS", "splitter", True, in_zone=False, is_swing=True),
+        _pitch("FS", "splitter", False, in_zone=False, is_swing=False),
+        _pitch("SL", "slider", False, in_zone=False, is_swing=False),
+        _pitch("SL", "slider", False, in_zone=False, is_swing=False),
+    ]
+    collection = PitchCollection(pitches)
+
+    rates = collection.chase_rate(by_pitch_type=True)
+
+    assert rates["splitter"] == 50.0
+    assert rates["slider"] == 0.0
+
+
+def test_chase_rate_skips_pitches_with_no_location():
+    # A pitch with no plate coordinates can't be judged a chase opportunity,
+    # so it should drop out of the denominator rather than count as in-zone.
+    pitches = [
+        _pitch("FS", "splitter", False, in_zone=False, is_swing=True),
+        _pitch("FS", "splitter", False, in_zone=None, is_swing=False, plate_x=None, plate_z=None),
+    ]
+    collection = PitchCollection(pitches)
+
+    assert collection.chase_rate() == 100.0
+
+
+def test_chase_rate_no_pitches_outside_the_zone_is_nan():
+    import math
+
+    pitches = [_pitch("FF", "four-seam fastball", True, in_zone=True, is_swing=False)]
+
+    assert math.isnan(PitchCollection(pitches).chase_rate())
+
+
+def test_chase_rate_empty_collection():
+    import math
+
+    assert math.isnan(PitchCollection().chase_rate())
+
+
 def test_pitch_metrics_by_pitch_type():
     pitches = [
         _pitch(

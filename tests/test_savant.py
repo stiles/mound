@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from mound.cache import FileCache
-from mound.savant import fetch_game_feed, game_pitches_for_pitcher
+from mound.savant import fetch_game_feed, game_pitches_for_batter, game_pitches_for_pitcher
 from tests.conftest import register_gf
 
 
@@ -103,6 +103,27 @@ def test_game_pitches_reads_from_away_pitchers(mocked_responses):
 
     assert len(pitches) == 5
     assert all(p.game_pk == 1002 for p in pitches)
+
+
+def test_game_pitches_for_batter_spans_pitching_changes(mocked_responses):
+    # Game 1004's feed lists the reliever before the starter, so this also
+    # covers ordering by at-bat rather than by whichever arm the feed
+    # happened to index first.
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    pitches = game_pitches_for_batter(1004, 500001)
+
+    assert len(pitches) == 4
+    assert all(p.batter_id == 500001 for p in pitches)
+    assert [p.pitcher_id for p in pitches] == [808963, 808963, 700001, 700001]
+    order = [(p.at_bat_number, p.pitch_number) for p in pitches]
+    assert order == sorted(order)
+
+
+def test_game_pitches_for_batter_who_did_not_play_returns_empty(mocked_responses):
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    assert game_pitches_for_batter(1004, 999999) == []
 
 
 def test_fetch_game_feed_second_call_hits_cache_not_network(mocked_responses, tmp_path):

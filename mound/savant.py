@@ -3,7 +3,9 @@
 `/gf?game_pk={pk}` returns Statcast pitch data for both teams in a game,
 organized as `home_pitchers`/`away_pitchers` dicts keyed by pitcher ID. That
 means we can go straight to a single pitcher's pitches without scanning
-every batter faced.
+every batter faced. Batter-side retrieval is the inverse: the feed has no
+batter index, so pulling one hitter's plate appearances means walking every
+pitcher's list and keeping the pitches thrown to them.
 """
 
 from __future__ import annotations
@@ -48,14 +50,15 @@ def _raw_pitches_for_pitcher(feed: dict, pitcher_id: int) -> list[dict]:
     return []
 
 
-def game_pitches_for_pitcher(
-    game_pk: int, pitcher_id: int, cache: Cache | None = None
-) -> list[Pitch]:
-    """Fetch and normalize every pitch a given pitcher threw in one game."""
-    feed = fetch_game_feed(game_pk, cache=cache)
-    game_date = feed.get("game_date")
-    raw_pitches = _raw_pitches_for_pitcher(feed, pitcher_id)
+def _raw_pitches_for_batter(feed: dict, batter_id: int) -> list[dict]:
+    raw_pitches: list[dict] = []
+    for side in ("home_pitchers", "away_pitchers"):
+        for pitcher_pitches in (feed.get(side) or {}).values():
+            raw_pitches.extend(p for p in pitcher_pitches if p.get("batter") == batter_id)
+    return raw_pitches
 
+
+def _normalize_pitches(raw_pitches: list[dict], game_date: str | None) -> list[Pitch]:
     pitches = []
     for raw in raw_pitches:
         if raw.get("type") != "pitch":
@@ -66,3 +69,23 @@ def game_pitches_for_pitcher(
 
     pitches.sort(key=lambda p: (p.at_bat_number or 0, p.pitch_number or 0))
     return pitches
+
+
+def game_pitches_for_pitcher(
+    game_pk: int, pitcher_id: int, cache: Cache | None = None
+) -> list[Pitch]:
+    """Fetch and normalize every pitch a given pitcher threw in one game."""
+    feed = fetch_game_feed(game_pk, cache=cache)
+    return _normalize_pitches(_raw_pitches_for_pitcher(feed, pitcher_id), feed.get("game_date"))
+
+
+def game_pitches_for_batter(
+    game_pk: int, batter_id: int, cache: Cache | None = None
+) -> list[Pitch]:
+    """Fetch and normalize every pitch a given batter faced in one game.
+
+    Pitches come back in at-bat order regardless of which pitchers threw
+    them, so a hitter's night reads start to finish across pitching changes.
+    """
+    feed = fetch_game_feed(game_pk, cache=cache)
+    return _normalize_pitches(_raw_pitches_for_batter(feed, batter_id), feed.get("game_date"))

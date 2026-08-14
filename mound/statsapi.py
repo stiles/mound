@@ -1,8 +1,10 @@
-"""MLB Stats API client: game discovery via a pitcher's game log.
+"""MLB Stats API client: game discovery via a player's game log.
 
-Mound uses the Stats API to discover *which games* a pitcher appeared in
+Mound uses the Stats API to discover *which games* a player appeared in
 (honoring ``last``/date-range filters at the game level) before asking
-Baseball Savant for the actual pitch-level detail of each game.
+Baseball Savant for the actual pitch-level detail of each game. The same
+endpoint covers both sides of the ball -- a pitcher's appearances or a
+batter's -- via the ``group`` parameter.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from mound.http import get_json
 
 @dataclass
 class GameAppearance:
-    """A single game a pitcher appeared in, per the Stats API game log."""
+    """A single game a player appeared in, per the Stats API game log."""
 
     game_pk: int
     game_date: date
@@ -64,12 +66,16 @@ def _appearance_from_split(split: dict) -> GameAppearance | None:
     )
 
 
-def pitching_game_log(player_id: int, season: int) -> list[GameAppearance]:
-    """Fetch a pitcher's game-by-game log for a single season, oldest first."""
+def game_log(player_id: int, season: int, group: str = "pitching") -> list[GameAppearance]:
+    """Fetch a player's game-by-game log for a single season, oldest first.
+
+    ``group`` picks which side of the ball the log covers: ``"pitching"``
+    for games a pitcher appeared in, ``"hitting"`` for games a batter did.
+    """
     url = f"{config.STATSAPI_V1}/people/{player_id}/stats"
     data = get_json(
         url,
-        params={"stats": "gameLog", "group": "pitching", "season": season},
+        params={"stats": "gameLog", "group": group, "season": season},
     )
     stats = data.get("stats") or []
     if not stats:
@@ -81,10 +87,12 @@ def pitching_game_log(player_id: int, season: int) -> list[GameAppearance]:
     return appearances
 
 
-def pitching_game_log_seasons(player_id: int, seasons: list[int]) -> list[GameAppearance]:
-    """Fetch and merge a pitcher's game log across multiple seasons, oldest first."""
+def game_log_seasons(
+    player_id: int, seasons: list[int], group: str = "pitching"
+) -> list[GameAppearance]:
+    """Fetch and merge a player's game log across multiple seasons, oldest first."""
     all_appearances: list[GameAppearance] = []
     for season in seasons:
-        all_appearances.extend(pitching_game_log(player_id, season))
+        all_appearances.extend(game_log(player_id, season, group=group))
     all_appearances.sort(key=lambda a: a.game_date)
     return all_appearances

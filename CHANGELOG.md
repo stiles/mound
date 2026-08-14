@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 Format based on Keep a Changelog.
 
+## [0.7.0] - 2026-08-13
+
+### Added
+
+- Batter filtering, for matchup views from the pitcher's side: `PitchCollection.filter(batter=...)` and `Pitcher.pitches(batter=...)`, plus a `--batter` flag on `mound pitches`, `mix`, `results`, `arsenal`, `zone` and `video`. Takes a name or an MLB player ID, or a list mixing the two; names match any part of the name Savant reports, ignoring case and accents, so `--batter perdomo` is enough. `filter(pitcher=...)` is the same thing for the other side, useful once a collection spans more than one arm.
+- `Batter`, the mirror image of `Pitcher`: the pitches a hitter *faced*, discovered from his own game log and pulled from every pitcher who faced him in those games. `Batter("Geraldo Perdomo").pitches(last=5, pitcher="Roki Sasaki")` and `Pitcher("Roki Sasaki").pitches(last=5, batter="Geraldo Perdomo")` return the same matchup from either side; the pitcher's side fetches far fewer games, since a starter appears in a fraction of the games a hitter plays.
+- `PitchCollection.chase_rate()` (with the same `by_pitch_type` option as `swing_rate()`/`whiff_rate()`): swings divided by pitches *outside* the zone, so a chase pitch's real job shows up as its own number. Location comes from `in_zone` geometry rather than the `is_strike` ruling, and pitches with no plate coordinates drop out of the denominator instead of counting as strikes. `mound arsenal` gains a `chase_rate` column alongside `whiff_rate`.
+- `plot_zone()` labels matchups: a plot narrowed to one hitter notes "vs. <hitter>" in its dek, and a batter-side collection headlines as "Pitch locations to <hitter>" rather than crediting the hitter with throwing them.
+
+### Changed
+
+- `mound.statsapi.pitching_game_log()`/`pitching_game_log_seasons()` are now `game_log()`/`game_log_seasons()` with a `group` argument (`"pitching"` or `"hitting"`), since the same Stats API endpoint serves both sides of the ball. Internal client functions, not part of the documented `Pitcher`/`PitchCollection` API.
+
 ## [0.6.1] - 2026-08-13
 
 ### Fixed

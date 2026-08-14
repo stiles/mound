@@ -1,8 +1,8 @@
 """Pitch usage and outcome calculations.
 
-Kept intentionally small for the prototype -- pitch mix and strike rate --
-but structured so additional Statcast metrics (whiff rate, chase rate, exit
-velocity, etc.) can be added as more functions over the same
+Kept intentionally small -- mix, strike rate, swing/whiff/chase rate and
+pitch shape -- but structured so additional Statcast metrics (exit velocity,
+expected outcomes, etc.) can be added as more functions over the same
 :class:`~mound.pitches.PitchCollection` shape.
 """
 
@@ -96,6 +96,37 @@ def whiff_rate(collection: PitchCollection, by_pitch_type: bool = False) -> floa
         return rates
 
     return round(df["is_whiff"].mean() * 100, 1)
+
+
+def chase_rate(collection: PitchCollection, by_pitch_type: bool = False) -> float | pd.Series:
+    """Percentage of pitches *outside the zone* that drew a swing.
+
+    The out-of-zone counterpart to :func:`swing_rate`: chases divided by
+    pitches a batter could have simply taken for a ball. A pitch's location
+    is judged by ``in_zone`` (geometry), not ``is_strike`` (the ruling), so
+    a called strike on the corner counts as in the zone even if the umpire
+    would have been generous about it. With ``by_pitch_type=True``, returns
+    a :class:`pandas.Series` per pitch type.
+    """
+    df = collection.to_frame()
+    if not df.empty:
+        # Cast to nullable "boolean" rather than bool so a pitch with no plate
+        # coordinates stays missing instead of collapsing to False: there's no
+        # way to know whether it was a chase opportunity, so it drops out of
+        # the denominator instead of counting as one.
+        outside_zone = df["in_zone"].astype("boolean").eq(False).fillna(False)
+        df = df[outside_zone]
+
+    if df.empty:
+        return pd.Series(dtype=float, name="chase_rate") if by_pitch_type else float("nan")
+
+    if by_pitch_type:
+        rates = df.groupby("pitch_type")["is_swing"].mean() * 100
+        rates = rates.round(1).sort_values(ascending=False)
+        rates.name = "chase_rate"
+        return rates
+
+    return round(df["is_swing"].mean() * 100, 1)
 
 
 # Columns pitch_metrics() averages -- movement/release fields that may be

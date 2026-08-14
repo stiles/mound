@@ -1,4 +1,4 @@
-"""The composable, user-facing API: ``Pitcher`` and ``PitchCollection``.
+"""The composable, user-facing API: ``Pitcher``, ``Batter`` and ``PitchCollection``.
 
     from mound import Pitcher
 
@@ -13,10 +13,18 @@
 Filtering a :class:`PitchCollection` always returns another
 :class:`PitchCollection`, so analysis, plotting and export methods work the
 same way regardless of how the data was narrowed down.
+
+:class:`Batter` is the mirror image of :class:`Pitcher` -- the pitches a
+hitter *faced* rather than threw -- so a matchup can be asked from either
+side:
+
+    Pitcher("Roki Sasaki").pitches(last=8, batter="Shohei Ohtani")
+    Batter("Shohei Ohtani").pitches(last=20, pitcher="Roki Sasaki")
 """
 
 from __future__ import annotations
 
+import unicodedata
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -26,7 +34,7 @@ from mound import statsapi
 from mound.cache import Cache, resolve_cache
 from mound.models import Pitch, normalize_pitch_type, normalize_stand
 from mound.players import Player, resolve_player
-from mound.savant import game_pitches_for_pitcher
+from mound.savant import game_pitches_for_batter, game_pitches_for_pitcher
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -35,6 +43,7 @@ if TYPE_CHECKING:
 
 
 DateLike = str | date | datetime
+PersonLike = int | str | list[int | str]
 
 
 def _as_date(value: DateLike) -> date:
@@ -45,6 +54,39 @@ def _as_date(value: DateLike) -> date:
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
+def _fold_name(name: str) -> str:
+    """Lowercase and strip accents, so "berrios" still matches "Berríos"."""
+    decomposed = unicodedata.normalize("NFKD", name)
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).lower()
+
+
+def _person_criteria(value: PersonLike) -> tuple[set[int], list[str]]:
+    """Split a batter/pitcher filter value into MLB player IDs and name fragments."""
+    values = value if isinstance(value, list | tuple | set) else [value]
+    ids: set[int] = set()
+    names: list[str] = []
+    for item in values:
+        text = str(item).strip()
+        if text.isdigit():
+            ids.add(int(text))
+        elif text:
+            names.append(_fold_name(text))
+    return ids, names
+
+
+def _person_matches(
+    player_id: int | None, name: str | None, ids: set[int], names: list[str]
+) -> bool:
+    if player_id is not None and player_id in ids:
+        return True
+    if not name:
+        return False
+    # Substring matching so "ohtani" or "judge" lands without having to
+    # reproduce the exact full name Savant reports.
+    folded = _fold_name(name)
+    return any(fragment in folded for fragment in names)
+
+
 class PitchCollection:
     """An immutable, filterable collection of normalized pitches.
 
@@ -53,15 +95,28 @@ class PitchCollection:
     convenience methods.
     """
 
-    def __init__(self, pitches: list[Pitch] | None = None, pitcher: Player | None = None):
+    def __init__(
+        self,
+        pitches: list[Pitch] | None = None,
+        pitcher: Player | None = None,
+        batter: Player | None = None,
+    ):
         self._pitches = pitches or []
+        # Whichever player the collection was retrieved for, which decides
+        # how it reads: a pitcher's pitches thrown, or a batter's faced.
         self.pitcher = pitcher
+        self.batter = batter
 
     def __len__(self) -> int:
         return len(self._pitches)
 
     def __repr__(self) -> str:
-        who = self.pitcher.full_name if self.pitcher else "unknown pitcher"
+        if self.pitcher and self.batter:
+            who = f"{self.pitcher.full_name} to {self.batter.full_name}"
+        elif self.batter:
+            who = f"to {self.batter.full_name}"
+        else:
+            who = self.pitcher.full_name if self.pitcher else "unknown pitcher"
         return f"<PitchCollection {who}: {len(self)} pitches>"
 
     def __iter__(self):
@@ -102,6 +157,8 @@ class PitchCollection:
         is_strike: bool | None = None,
         in_zone: bool | None = None,
         stand: str | None = None,
+        batter: PersonLike | None = None,
+        pitcher: PersonLike | None = None,
     ) -> PitchCollection:
         """Return a new :class:`PitchCollection` narrowed by the given criteria.
 
@@ -110,6 +167,12 @@ class PitchCollection:
 
         ``stand`` filters by batter side, e.g. ``"L"``/``"left"``/``"LHB"``
         or ``"R"``/``"right"``/``"RHB"`` (case-insensitive).
+
+        ``batter`` and ``pitcher`` each take an MLB player ID or a name, or a
+        list mixing the two. Names match any part of the name Savant reports,
+        ignoring case and accents, so ``batter="ohtani"`` is enough. A name
+        loose enough to match two players (``"contreras"``) keeps both; pass
+        an ID to be unambiguous.
 
         ``at_bat_number`` is only unique within a single game, so pair it
         with ``game`` to isolate one at-bat; add ``pitch_number`` on top of
@@ -152,11 +215,23 @@ class PitchCollection:
             wanted_stand = normalize_stand(stand) or stand.strip().upper()
             pitches = [p for p in pitches if p.batter_stand == wanted_stand]
 
-        return PitchCollection(pitches, pitcher=self.pitcher)
+        if batter is not None:
+            ids, names = _person_criteria(batter)
+            pitches = [
+                p for p in pitches if _person_matches(p.batter_id, p.batter_name, ids, names)
+            ]
+
+        if pitcher is not None:
+            ids, names = _person_criteria(pitcher)
+            pitches = [
+                p for p in pitches if _person_matches(p.pitcher_id, p.pitcher_name, ids, names)
+            ]
+
+        return PitchCollection(pitches, pitcher=self.pitcher, batter=self.batter)
 
     def limit(self, n: int) -> PitchCollection:
         """Return a new :class:`PitchCollection` capped to its first ``n`` pitches."""
-        return PitchCollection(self._pitches[:n], pitcher=self.pitcher)
+        return PitchCollection(self._pitches[:n], pitcher=self.pitcher, batter=self.batter)
 
     # -- analysis -----------------------------------------------------
     def pitch_mix(self) -> pd.Series:
@@ -178,6 +253,11 @@ class PitchCollection:
         from mound.analysis import whiff_rate
 
         return whiff_rate(self, by_pitch_type=by_pitch_type)
+
+    def chase_rate(self, by_pitch_type: bool = False) -> float | pd.Series:
+        from mound.analysis import chase_rate
+
+        return chase_rate(self, by_pitch_type=by_pitch_type)
 
     def pitch_metrics(self, by_pitch_type: bool = True) -> pd.DataFrame | pd.Series:
         from mound.analysis import pitch_metrics
@@ -235,6 +315,45 @@ def _seasons_for_query(
     return [date.today().year]
 
 
+def _game_pks_for_player(
+    player_id: int,
+    *,
+    group: str,
+    last: int | None,
+    since: DateLike | None,
+    until: DateLike | None,
+    season: int | None,
+) -> list[int]:
+    """Discover which games to fetch for a player, oldest first.
+
+    ``group`` is ``"pitching"`` for a pitcher's appearances or ``"hitting"``
+    for a batter's; the ``last``/``since``/``until``/``season`` narrowing is
+    identical either way.
+    """
+    seasons = _seasons_for_query(since, until, season)
+    appearances = statsapi.game_log_seasons(player_id, seasons, group=group)
+
+    if since is not None:
+        since_date = _as_date(since)
+        appearances = [a for a in appearances if a.game_date >= since_date]
+    if until is not None:
+        until_date = _as_date(until)
+        appearances = [a for a in appearances if a.game_date <= until_date]
+
+    # If we need the last N appearances but this season doesn't have
+    # enough games yet (e.g. early April), fall back to prior seasons.
+    if last is not None and since is None and until is None and season is None:
+        lookback_seasons = list(seasons)
+        while len(appearances) < last and min(lookback_seasons) > 2015:
+            lookback_seasons = [min(lookback_seasons) - 1, *lookback_seasons]
+            appearances = statsapi.game_log_seasons(player_id, lookback_seasons, group=group)
+
+    if last is not None:
+        appearances = appearances[-last:]
+
+    return [a.game_pk for a in appearances]
+
+
 class Pitcher:
     """A pitcher, resolved from a name or MLB player ID.
 
@@ -268,6 +387,7 @@ class Pitcher:
         at_bat_number: int | list[int] | None = None,
         pitch_number: int | list[int] | None = None,
         stand: str | None = None,
+        batter: PersonLike | None = None,
         cache: bool | str | Path | Cache | None = False,
     ) -> PitchCollection:
         """Retrieve this pitcher's pitches.
@@ -281,11 +401,16 @@ class Pitcher:
           ``"YYYY-MM-DD"`` strings or :class:`datetime.date` objects.
         - ``season``: a single MLB season, if no explicit dates are given.
 
-        ``pitch_type``, ``at_bat_number``, ``pitch_number`` and ``stand``
-        are applied as post-retrieval filters (see
+        ``pitch_type``, ``at_bat_number``, ``pitch_number``, ``stand`` and
+        ``batter`` are applied as post-retrieval filters (see
         :meth:`PitchCollection.filter`); pair ``game`` with ``at_bat_number``
         (and ``pitch_number``, to land on one exact pitch) since an at-bat
         number is only unique within a single game.
+
+        ``batter`` narrows to one opposing hitter for a matchup view, by name
+        or MLB player ID::
+
+            roki.pitches(last=8, batter="Shohei Ohtani").pitch_mix()
 
         ``cache`` enables a local file cache of Savant's per-game responses
         (disabled by default): ``True`` uses the default cache location,
@@ -300,30 +425,14 @@ class Pitcher:
         if game is not None:
             game_pks = [game] if isinstance(game, int) else list(game)
         else:
-            seasons = _seasons_for_query(since, until, season)
-            appearances = statsapi.pitching_game_log_seasons(self.player.id, seasons)
-
-            if since is not None:
-                since_date = _as_date(since)
-                appearances = [a for a in appearances if a.game_date >= since_date]
-            if until is not None:
-                until_date = _as_date(until)
-                appearances = [a for a in appearances if a.game_date <= until_date]
-
-            # If we need the last N appearances but this season doesn't have
-            # enough games yet (e.g. early April), fall back to prior seasons.
-            if last is not None and since is None and until is None and season is None:
-                lookback_seasons = list(seasons)
-                while len(appearances) < last and min(lookback_seasons) > 2015:
-                    lookback_seasons = [min(lookback_seasons) - 1, *lookback_seasons]
-                    appearances = statsapi.pitching_game_log_seasons(
-                        self.player.id, lookback_seasons
-                    )
-
-            if last is not None:
-                appearances = appearances[-last:]
-
-            game_pks = [a.game_pk for a in appearances]
+            game_pks = _game_pks_for_player(
+                self.player.id,
+                group="pitching",
+                last=last,
+                since=since,
+                until=until,
+                season=season,
+            )
 
         all_pitches: list[Pitch] = []
         for game_pk in game_pks:
@@ -331,13 +440,95 @@ class Pitcher:
                 game_pitches_for_pitcher(game_pk, self.player.id, cache=cache_backend)
             )
 
-        collection = PitchCollection(all_pitches, pitcher=self.player)
-        if pitch_type is not None:
-            collection = collection.filter(pitch_type=pitch_type)
-        if at_bat_number is not None:
-            collection = collection.filter(at_bat_number=at_bat_number)
-        if pitch_number is not None:
-            collection = collection.filter(pitch_number=pitch_number)
-        if stand is not None:
-            collection = collection.filter(stand=stand)
-        return collection
+        return PitchCollection(all_pitches, pitcher=self.player).filter(
+            pitch_type=pitch_type,
+            at_bat_number=at_bat_number,
+            pitch_number=pitch_number,
+            stand=stand,
+            batter=batter,
+        )
+
+
+class Batter:
+    """A batter, resolved from a name or MLB player ID.
+
+    The mirror image of :class:`Pitcher`: :meth:`pitches` returns the pitches
+    this hitter *faced*, pulled from the games he played rather than the games
+    a pitcher appeared in. Retrieval is lazy, so constructing a ``Batter``
+    only resolves identity.
+    """
+
+    def __init__(self, name_or_id: str | int):
+        self.player = resolve_player(name_or_id)
+
+    def __repr__(self) -> str:
+        return f"<Batter {self.player.full_name} ({self.player.id})>"
+
+    @property
+    def id(self) -> int:
+        return self.player.id
+
+    @property
+    def name(self) -> str:
+        return self.player.full_name
+
+    def pitches(
+        self,
+        *,
+        last: int | None = None,
+        since: DateLike | None = None,
+        until: DateLike | None = None,
+        game: int | list[int] | None = None,
+        season: int | None = None,
+        pitcher: PersonLike | None = None,
+        pitch_type: str | list[str] | None = None,
+        at_bat_number: int | list[int] | None = None,
+        pitch_number: int | list[int] | None = None,
+        stand: str | None = None,
+        cache: bool | str | Path | Cache | None = False,
+    ) -> PitchCollection:
+        """Retrieve the pitches this batter faced.
+
+        Game selection (``game``/``last``/``since``/``until``/``season``) and
+        the post-retrieval filters work exactly as they do in
+        :meth:`Pitcher.pitches`, with ``last`` counting the batter's most
+        recent games played. ``pitcher`` narrows to one opposing arm, by name
+        or MLB player ID::
+
+            Batter("Shohei Ohtani").pitches(season=2026, pitcher="Roki Sasaki")
+
+        For a single matchup, asking from the pitcher's side
+        (``Pitcher(...).pitches(batter=...)``) fetches far fewer games, since
+        a starter appears in a fraction of the games a hitter plays. Come at
+        it from here when the hitter is the subject -- everything he saw,
+        from every pitcher.
+
+        ``stand`` is only meaningful for a switch hitter, who stands on
+        whichever side the opposing pitcher's hand dictates.
+        """
+        cache_backend = resolve_cache(cache)
+        if game is not None:
+            game_pks = [game] if isinstance(game, int) else list(game)
+        else:
+            game_pks = _game_pks_for_player(
+                self.player.id,
+                group="hitting",
+                last=last,
+                since=since,
+                until=until,
+                season=season,
+            )
+
+        all_pitches: list[Pitch] = []
+        for game_pk in game_pks:
+            all_pitches.extend(
+                game_pitches_for_batter(game_pk, self.player.id, cache=cache_backend)
+            )
+
+        return PitchCollection(all_pitches, batter=self.player).filter(
+            pitch_type=pitch_type,
+            at_bat_number=at_bat_number,
+            pitch_number=pitch_number,
+            stand=stand,
+            pitcher=pitcher,
+        )

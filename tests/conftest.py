@@ -53,7 +53,11 @@ def register_person(rsps: responses_lib.RequestsMock, player_id: int, fixture_na
 
 
 def register_game_log(
-    rsps: responses_lib.RequestsMock, player_id: int, fixture_name: str, season: int
+    rsps: responses_lib.RequestsMock,
+    player_id: int,
+    fixture_name: str,
+    season: int,
+    group: str = "pitching",
 ) -> None:
     rsps.add(
         responses_lib.GET,
@@ -62,7 +66,7 @@ def register_game_log(
         status=200,
         match=[
             responses_lib.matchers.query_param_matcher(
-                {"stats": "gameLog", "group": "pitching", "season": str(season)}
+                {"stats": "gameLog", "group": group, "season": str(season)}
             )
         ],
     )

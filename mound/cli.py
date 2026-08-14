@@ -5,6 +5,7 @@
     mound mix "Roki Sasaki" --last 4
     mound results "Roki Sasaki" --last 4 --pitch splitter
     mound arsenal "Roki Sasaki" --game 825051
+    mound arsenal "Roki Sasaki" --last 8 --batter "Shohei Ohtani"
     mound zone "Roki Sasaki" --pitch splitter --last 4 --out zone.png
     mound zone "Roki Sasaki" --last 8 --split-by stand --out zone.png
     mound video "Roki Sasaki" --pitch splitter --last 4 --out-dir clips
@@ -72,6 +73,10 @@ UntilOption = Annotated[str | None, typer.Option("--until", help="End date (YYYY
 GameOption = Annotated[int | None, typer.Option("--game", help="A specific MLB game_pk")]
 PitchOption = Annotated[str | None, typer.Option("--pitch", help="Pitch type, e.g. 'splitter'")]
 StandOption = Annotated[str | None, typer.Option("--stand", help="Batter side ('L' or 'R')")]
+BatterOption = Annotated[
+    str | None,
+    typer.Option("--batter", help="Opposing batter: name (partial is fine) or MLB player ID"),
+]
 AtBatOption = Annotated[
     int | None,
     typer.Option(
@@ -105,6 +110,7 @@ def _get_pitches(
     game: int | None,
     pitch: str | None,
     stand: str | None = None,
+    batter: str | None = None,
     at_bat_number: int | None = None,
     pitch_number: int | None = None,
     cache: bool = False,
@@ -125,6 +131,7 @@ def _get_pitches(
             game=game,
             pitch_type=pitch,
             stand=stand,
+            batter=batter,
             at_bat_number=at_bat_number,
             pitch_number=pitch_number,
             cache=cache_dir if cache_dir else cache,
@@ -159,6 +166,7 @@ def pitches(
     game: GameOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
+    batter: BatterOption = None,
     at_bat: AtBatOption = None,
     pitch_number: PitchNumberOption = None,
     export_path: str | None = typer.Option(None, "--export", help="Path to export results to"),
@@ -178,6 +186,7 @@ def pitches(
         game=game,
         pitch=pitch,
         stand=stand,
+        batter=batter,
         at_bat_number=at_bat,
         pitch_number=pitch_number,
         cache=cache,
@@ -219,6 +228,7 @@ def mix(
     game: GameOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
+    batter: BatterOption = None,
     at_bat: AtBatOption = None,
     pitch_number: PitchNumberOption = None,
     cache: CacheOption = False,
@@ -233,6 +243,7 @@ def mix(
         game=game,
         pitch=pitch,
         stand=stand,
+        batter=batter,
         at_bat_number=at_bat,
         pitch_number=pitch_number,
         cache=cache,
@@ -257,6 +268,7 @@ def results(
     game: GameOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
+    batter: BatterOption = None,
     at_bat: AtBatOption = None,
     pitch_number: PitchNumberOption = None,
     cache: CacheOption = False,
@@ -271,6 +283,7 @@ def results(
         game=game,
         pitch=pitch,
         stand=stand,
+        batter=batter,
         at_bat_number=at_bat,
         pitch_number=pitch_number,
         cache=cache,
@@ -305,16 +318,18 @@ def arsenal(
     game: GameOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
+    batter: BatterOption = None,
     at_bat: AtBatOption = None,
     pitch_number: PitchNumberOption = None,
     cache: CacheOption = False,
     cache_dir: CacheDirOption = None,
 ) -> None:
-    """Show each pitch type's velocity, spin, movement and whiff rate side by side.
+    """Show each pitch type's velocity, spin, movement, whiff and chase rate side by side.
 
     Meant for "how did this pitch look" questions -- run it once for a single
     outing (--game) and once for a wider range (--last/--since) to see what
-    changed, e.g. a splitter's whiff rate or a four-seamer's spin rate.
+    changed, e.g. a splitter's whiff rate or a four-seamer's spin rate. Add
+    --batter to scope the whole table to one matchup.
     """
     collection = _get_pitches(
         name,
@@ -324,6 +339,7 @@ def arsenal(
         game=game,
         pitch=pitch,
         stand=stand,
+        batter=batter,
         at_bat_number=at_bat,
         pitch_number=pitch_number,
         cache=cache,
@@ -336,6 +352,9 @@ def arsenal(
 
     summary = collection.pitch_metrics()
     summary["whiff_rate"] = collection.whiff_rate(by_pitch_type=True)
+    # NaN where a pitch type never landed outside the zone, which is the
+    # honest answer: there were no chances to chase it.
+    summary["chase_rate"] = collection.chase_rate(by_pitch_type=True)
 
     with pd.option_context("display.float_format", "{:.1f}".format):
         typer.echo(summary.to_string())
@@ -350,6 +369,7 @@ def zone(
     game: GameOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
+    batter: BatterOption = None,
     at_bat: AtBatOption = None,
     pitch_number: PitchNumberOption = None,
     kind: str = typer.Option(
@@ -374,6 +394,7 @@ def zone(
         game=game,
         pitch=pitch,
         stand=stand,
+        batter=batter,
         at_bat_number=at_bat,
         pitch_number=pitch_number,
         cache=cache,
@@ -399,6 +420,7 @@ def video(
     game: GameOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
+    batter: BatterOption = None,
     at_bat: AtBatOption = None,
     pitch_number: PitchNumberOption = None,
     out_dir: str = typer.Option("videos", "--out-dir", help="Directory to save clips to"),
@@ -426,6 +448,7 @@ def video(
         game=game,
         pitch=pitch,
         stand=stand,
+        batter=batter,
         at_bat_number=at_bat,
         pitch_number=pitch_number,
         cache=cache,

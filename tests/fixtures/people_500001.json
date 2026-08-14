@@ -1,0 +1,20 @@
+{
+  "copyright": "Copyright MLB Advanced Media, L.P.",
+  "people": [
+    {
+      "id": 500001,
+      "fullName": "Test Batter 1",
+      "firstName": "Test",
+      "lastName": "Batter",
+      "active": true,
+      "currentTeam": { "id": 109, "name": "Arizona Diamondbacks" },
+      "primaryPosition": {
+        "code": "8",
+        "name": "Outfielder",
+        "type": "Outfielder",
+        "abbreviation": "CF"
+      },
+      "batSide": { "code": "L", "description": "Left" }
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "copyright": "Copyright MLB Advanced Media, L.P.",
+  "stats": [
+    {
+      "type": { "displayName": "gameLog" },
+      "group": { "displayName": "hitting" },
+      "splits": [
+        {
+          "season": "2025",
+          "date": "2025-07-10",
+          "team": { "id": 109, "name": "Arizona Diamondbacks" },
+          "opponent": { "id": 119, "name": "Los Angeles Dodgers" },
+          "isHome": false,
+          "gameType": "R",
+          "stat": { "gamesPlayed": 1, "atBats": 4, "hits": 1 },
+          "game": { "gamePk": 1001 }
+        },
+        {
+          "season": "2025",
+          "date": "2025-08-15",
+          "team": { "id": 109, "name": "Arizona Diamondbacks" },
+          "opponent": { "id": 119, "name": "Los Angeles Dodgers" },
+          "isHome": false,
+          "gameType": "R",
+          "stat": { "gamesPlayed": 1, "atBats": 3, "hits": 0 },
+          "game": { "gamePk": 1003 }
+        },
+        {
+          "season": "2025",
+          "date": "2025-08-20",
+          "team": { "id": 109, "name": "Arizona Diamondbacks" },
+          "opponent": { "id": 119, "name": "Los Angeles Dodgers" },
+          "isHome": false,
+          "gameType": "R",
+          "stat": { "gamesPlayed": 1, "atBats": 4, "hits": 2 },
+          "game": { "gamePk": 1004 }
+        }
+      ]
+    }
+  ]
+}

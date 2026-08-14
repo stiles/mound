@@ -165,19 +165,31 @@ def _date_range_label(raw_dates) -> str | None:
 
 
 def _default_headline(collection: PitchCollection, df) -> str:
-    who = collection.pitcher.full_name if collection.pitcher else "Pitcher"
     pitch_types = df["pitch_type"].dropna().unique() if not df.empty else []
-    if len(pitch_types) == 1:
-        return f"{who}\u2019s {pitch_types[0]} locations"
-    return f"{who}\u2019s pitch locations"
+    what = pitch_types[0] if len(pitch_types) == 1 else "pitch"
+
+    # A batter-side collection is about pitches faced, so name the hitter as
+    # the target rather than crediting him with throwing them.
+    if collection.batter and not collection.pitcher:
+        return f"{what.capitalize()} locations to {collection.batter.full_name}"
+
+    who = collection.pitcher.full_name if collection.pitcher else "Pitcher"
+    return f"{who}\u2019s {what} locations"
 
 
-def _default_subtitle(df) -> str:
+def _default_subtitle(collection: PitchCollection, df) -> str:
     if df.empty:
         return "No pitches with location data"
     parts = [f"{len(df)} pitch{'es' if len(df) != 1 else ''}"]
     if df["is_strike"].notna().any():
         parts.append(f"{df['is_strike'].mean() * 100:.0f}% strikes")
+
+    # A pitcher's plot narrowed to one hitter is a matchup, and worth saying
+    # so -- unless the headline already names him, as it does batter-side.
+    batters = df["batter_name"].dropna().unique() if "batter_name" in df else []
+    if len(batters) == 1 and not collection.batter:
+        parts.append(f"vs. {batters[0]}")
+
     date_label = _date_range_label(df["game_date"]) if "game_date" in df else None
     if date_label:
         parts.append(date_label)
@@ -462,7 +474,7 @@ def plot_zone(
 
         headline = title if title is not None else _default_headline(collection, df)
         if owns_figure:
-            dek = subtitle if subtitle is not None else _default_subtitle(df)
+            dek = subtitle if subtitle is not None else _default_subtitle(collection, df)
             _add_chrome(fig, headline, dek, source)
         else:
             ax.set_title(headline, loc="left", fontsize=12, fontweight="semibold", color=INK)
@@ -511,7 +523,7 @@ def _plot_zone_faceted(
             )
 
         headline = title if title is not None else _default_headline(collection, df)
-        dek = subtitle if subtitle is not None else _default_subtitle(df)
+        dek = subtitle if subtitle is not None else _default_subtitle(collection, df)
         _add_chrome(fig, headline, dek, source)
 
         if out:

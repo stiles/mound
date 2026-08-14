@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mound.pitches import Pitcher
+from mound.pitches import Batter, Pitcher
 from tests.conftest import register_game_log, register_gf, register_person
 
 
@@ -10,6 +10,16 @@ def _register_roki_with_all_games(mocked_responses):
     register_gf(mocked_responses, 1001, "gf_game_1001.json")
     register_gf(mocked_responses, 1002, "gf_game_1002.json")
     register_gf(mocked_responses, 1003, "gf_game_1003.json")
+
+
+def _register_batter_with_all_games(mocked_responses):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_game_log(
+        mocked_responses, 500001, "hitting_game_log_2025.json", season=2025, group="hitting"
+    )
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+    register_gf(mocked_responses, 1003, "gf_game_1003.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
 
 
 def test_pitcher_resolves_identity(mocked_responses):
@@ -138,6 +148,118 @@ def test_pitches_at_bat_and_pitch_number_shortcuts_filter_at_retrieval(mocked_re
 
     assert len(collection) == 1
     assert collection.pitches[0].pitch_id == "1001-1-2"
+
+
+def test_collection_filter_by_batter_id(mocked_responses):
+    _register_roki_with_all_games(mocked_responses)
+
+    collection = Pitcher(808963).pitches(last=3, season=2025)
+    vs_batter = collection.filter(batter=500002)
+
+    assert len(vs_batter) == 7  # 2 + 2 + 3 pitches to batter 500002
+    assert all(p.batter_id == 500002 for p in vs_batter)
+
+
+def test_collection_filter_by_batter_name_is_partial(mocked_responses):
+    _register_roki_with_all_games(mocked_responses)
+
+    collection = Pitcher(808963).pitches(last=3, season=2025)
+    vs_batter = collection.filter(batter="batter 1")
+
+    assert len(vs_batter) == 9  # 3 pitches per game to batter 500001
+    assert all(p.batter_name == "Test Batter 1" for p in vs_batter)
+
+
+def test_collection_filter_by_batter_ignores_accents(mocked_responses):
+    from mound.pitches import PitchCollection
+    from mound.savant import game_pitches_for_pitcher
+
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    collection = PitchCollection(game_pitches_for_pitcher(1004, 700001))
+
+    # The feed spells him "José Ramírez"; plain ASCII should still find him.
+    assert len(collection.filter(batter="jose ramirez")) == 1
+    assert len(collection.filter(batter="Ramirez")) == 1
+
+
+def test_collection_filter_by_batter_accepts_a_mixed_list(mocked_responses):
+    _register_roki_with_all_games(mocked_responses)
+
+    collection = Pitcher(808963).pitches(last=3, season=2025)
+    both = collection.filter(batter=[500001, "batter 2"])
+
+    assert len(both) == len(collection)
+
+
+def test_pitches_batter_shortcut_filters_at_retrieval(mocked_responses):
+    _register_roki_with_all_games(mocked_responses)
+
+    collection = Pitcher(808963).pitches(last=3, season=2025, batter="Test Batter 1")
+
+    assert len(collection) == 9
+    assert all(p.batter_id == 500001 for p in collection)
+
+
+def test_batter_resolves_identity(mocked_responses):
+    register_person(mocked_responses, 500001, "people_500001.json")
+
+    batter = Batter(500001)
+
+    assert batter.id == 500001
+    assert batter.name == "Test Batter 1"
+
+
+def test_batter_pitches_faced_come_from_every_pitcher(mocked_responses):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    collection = Batter(500001).pitches(game=1004)
+
+    assert len(collection) == 4
+    assert {p.pitcher_id for p in collection} == {808963, 700001}
+    assert collection.batter.id == 500001
+    assert collection.pitcher is None
+
+
+def test_batter_pitches_last_n_uses_the_hitting_game_log(mocked_responses):
+    _register_batter_with_all_games(mocked_responses)
+
+    collection = Batter(500001).pitches(last=2, season=2025)
+
+    # Games 1003 and 1004 -- the batter's two most recent, not the pitcher's.
+    assert set(collection.games) == {1003, 1004}
+
+
+def test_batter_pitches_filtered_to_one_pitcher_is_a_matchup(mocked_responses):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    collection = Batter(500001).pitches(game=1004, pitcher="Roki Sasaki")
+
+    assert len(collection) == 2
+    assert all(p.pitcher_id == 808963 for p in collection)
+
+
+def test_batter_pitches_filter_by_pitcher_id(mocked_responses):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    collection = Batter(500001).pitches(game=1004, pitcher=700001)
+
+    assert len(collection) == 2
+    assert all(p.pitcher_name == "Relief Pitcher" for p in collection)
+
+
+def test_matchup_from_either_side_returns_the_same_pitches(mocked_responses):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    from_pitcher = Pitcher(808963).pitches(game=1004, batter=500001)
+    from_batter = Batter(500001).pitches(game=1004, pitcher=808963)
+
+    assert [p.pitch_id for p in from_pitcher] == [p.pitch_id for p in from_batter]
 
 
 def test_empty_collection_has_no_pitches():

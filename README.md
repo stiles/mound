@@ -6,6 +6,7 @@ A CLI and Python toolkit for retrieving, analyzing and visualizing MLB pitch-lev
 > How many splitters did Roki Sasaki throw against the Diamondbacks last night?
 > How often has he thrown it relative to his other pitches over his last four starts?
 > What does its location look like over that period?
+> How does he attack one particular hitter, and does that hitter chase the splitter?
 ```
 
 Mound answers questions like these with a few CLI commands or a few lines of Python.
@@ -50,8 +51,11 @@ mound pitches "Roki Sasaki" --last 4 --pitch splitter
 mound mix "Roki Sasaki" --last 4
 mound results "Roki Sasaki" --last 4 --pitch splitter
 
-# Velocity, spin, movement and whiff rate, side by side
+# Velocity, spin, movement, whiff and chase rate, side by side
 mound arsenal "Roki Sasaki" --game 825051
+
+# Narrow any command to one opposing batter for a matchup view
+mound results "Roki Sasaki" --last 4 --batter "Geraldo Perdomo"
 
 # Plot pitch locations against the strike zone
 mound zone "Roki Sasaki" --pitch splitter --last 4 --out splitter_zone.png
@@ -89,6 +93,7 @@ splitters.pitch_mix()
 splitters.strike_rate()
 splitters.swing_rate()
 splitters.whiff_rate()  # of swings, not of every pitch -- see below
+splitters.chase_rate()  # of pitches outside the zone
 splitters.plot_zone(out="splitter_zone.png")
 
 pitches.pitch_metrics()  # avg velocity/spin/movement per pitch type
@@ -113,14 +118,54 @@ splitters.download_videos(out_dir="clips")
 | `game` | one or more MLB `game_pk` values |
 | `pitch_type` | a pitch name, alias, or Statcast code (see below) |
 | `stand` | batter side: `"L"`/`"left"`/`"LHB"` or `"R"`/`"right"`/`"RHB"` |
+| `batter` | an opposing hitter, by name or MLB player ID (see [Matchups](#matchups)) |
 | `at_bat_number` | a specific at-bat — pair with `game`, since it's only unique within one game |
 | `pitch_number` | a specific pitch within that at-bat (e.g. `3` for the third pitch) — pair with `game` and `at_bat_number` to land on one exact pitch |
 
 Filtering a `PitchCollection` always returns another `PitchCollection`, so any combination of `.filter()`, `.pitch_mix()`, `.strike_rate()`, `.plot_zone()` and export methods composes freely.
 
-## Whiff rate and pitch metrics
+## Matchups
 
-`swing_rate()` and `whiff_rate()` (each with a `by_pitch_type` option) answer "how nasty was it": whiff rate is the percentage of *swings* that missed, matching Baseball Savant's own convention — misses divided by swings, not by every pitch thrown, so a pitch rarely swung at can still post a high whiff rate on the swings it draws. `pitch_metrics()` averages velocity, spin rate and movement (`horizontal_break`, `induced_vertical_break`) per pitch type.
+Every retrieval and filter takes a `batter`, so any command or method can be scoped to one hitter. Names match on any part of the name Savant reports, ignoring case and accents — `"perdomo"` or `"Geraldo Perdomo"` both work, and an MLB player ID settles a name that's too common to be unique:
+
+```bash
+mound results "Roki Sasaki" --last 4 --batter perdomo
+mound zone "Roki Sasaki" --last 4 --batter perdomo --out matchup.png
+```
+
+```python
+roki.pitches(last=4, batter="perdomo").pitch_mix()
+roki.pitches(last=4).filter(batter=[672695, "Lindor"])  # several hitters at once
+```
+
+`Batter` asks the same question from the other side — the pitches a hitter *faced*, from every arm he saw:
+
+```python
+from mound import Batter
+
+perdomo = Batter("Geraldo Perdomo")
+
+faced = perdomo.pitches(last=5)              # everything, across pitching changes
+vs_roki = perdomo.pitches(last=5, pitcher="Roki Sasaki")
+
+faced.chase_rate()      # how often he chased out of the zone
+faced.pitch_mix()       # what pitchers fed him
+faced.plot_zone(out="perdomo_zone.png")
+```
+
+Both sides return the same pitches for a given matchup, so pick whichever player is the subject of the question. `Pitcher.pitches(batter=...)` is the cheaper route for a one-off matchup, since a starter appears in a fraction of the games a hitter plays and Mound fetches one Savant response per game.
+
+## Whiff rate, chase rate and pitch metrics
+
+`swing_rate()`, `whiff_rate()` and `chase_rate()` (each with a `by_pitch_type` option) answer "how nasty was it" from three angles:
+
+| Method | Numerator | Denominator |
+|---|---|---|
+| `swing_rate()` | swings | every pitch |
+| `whiff_rate()` | swings that missed | swings |
+| `chase_rate()` | swings | pitches outside the zone |
+
+Whiff rate divides by swings rather than by every pitch, matching Baseball Savant's own convention, so a pitch rarely swung at can still post a high whiff rate on the swings it draws. Chase rate is the out-of-zone counterpart to `swing_rate()`: how often a hitter went after a pitch he could have taken for a ball. It reads location from `in_zone`, not `is_strike` ([they differ](#is_strike-vs-in_zone)), and skips pitches with no plate coordinates rather than assuming they were strikes. `pitch_metrics()` averages velocity, spin rate and movement (`horizontal_break`, `induced_vertical_break`) per pitch type.
 
 Compare one outing against a wider window to see what stood out:
 
@@ -135,18 +180,22 @@ last_start.pitch_metrics().loc["four-seam fastball", "spin_rate"]  # spinning it
 season.pitch_metrics().loc["four-seam fastball", "spin_rate"]
 ```
 
-The CLI's `mound arsenal` combines `pitch_metrics()` and `whiff_rate()` into one table:
+The CLI's `mound arsenal` combines `pitch_metrics()`, `whiff_rate()` and `chase_rate()` into one table:
 
 ```bash
 mound arsenal "Roki Sasaki" --game 825051
 ```
 
 ```
-                    pitches  velocity  spin_rate  release_extension  horizontal_break  induced_vertical_break  whiff_rate
+                    pitches  velocity  spin_rate  release_extension  horizontal_break  induced_vertical_break  whiff_rate  chase_rate
 pitch_type
-four-seam fastball       35      98.8     2427.1                7.1              11.2                    16.9        27.3
-splitter                 32      90.2      868.1                7.2               5.3                     1.0        13.6
+four-seam fastball       35      98.8     2427.1                7.1              11.2                    16.9        27.3         6.2
+splitter                 32      90.2      868.1                7.2               5.3                     1.0        13.6        57.9
+slider                   14      87.1     2099.3                7.1               3.0                     0.1        40.0        33.3
+forkball                  5      88.2      758.2                7.1               2.8                    -2.0        50.0         0.0
 ```
+
+The two rates read differently on purpose: the four-seamer lives in the zone (6.2% chase rate) and gets missed when hitters swing, while the splitter's whole job is to be chased below it (57.9%). A `chase_rate` of `NaN` means that pitch type never left the zone, so there was nothing to chase.
 
 ## Plots
 
@@ -189,7 +238,7 @@ These sound interchangeable but aren't, and it's easy to expect a plotted zone b
 - **`is_strike`** is whatever counts as a strike *by rule*: a called strike, a swinging strike, a foul ball, or a ball put in play. It's about the ruling, not the location — a pitch that draws a swing and a miss (or a foul, or a groundout) well outside the box still counts as a strike.
 - **`in_zone`** is purely locational: does the pitch — modeled as an actual baseball, not a point — overlap the strike-zone rectangle for that batter's `sz_top`/`sz_bot`?
 
-A good chase pitch (splitters, sweepers, low sinkers) will show a much higher `is_strike` rate than `in_zone` rate. That's the pitch working as intended, not a bug — batters are swinging at (or getting jammed by) pitches outside the zone on purpose. If a `plot_zone()` subtitle's strike percentage doesn't match how many dots visually sit inside the drawn box, that's this distinction at work; check `in_zone` counts (or `.filter(in_zone=True)`) for the locational answer, not `strike_rate()`.
+A good chase pitch (splitters, sweepers, low sinkers) will show a much higher `is_strike` rate than `in_zone` rate. That's the pitch working as intended, not a bug — batters are swinging at (or getting jammed by) pitches outside the zone on purpose, which is exactly what [`chase_rate()`](#whiff-rate-chase-rate-and-pitch-metrics) measures. If a `plot_zone()` subtitle's strike percentage doesn't match how many dots visually sit inside the drawn box, that's this distinction at work; check `in_zone` counts (or `.filter(in_zone=True)`) for the locational answer, not `strike_rate()`.
 
 `in_zone` models the ball as a sphere overlapping the zone rectangle, which matches Statcast's own methodology (checked against Baseball Savant's own `zone`/`isInZone` fields across thousands of live pitches with zero mismatches). One consequence: a pitch can register `in_zone=True` even when its center is outside the box on *both* axes at once, as long as it's within one ball radius of a corner — a legitimate, if visually surprising, edge case. `in_zone` also reflects Statcast's calculated geometry, not the home-plate umpire's real-time call; the two disagree routinely on borderline pitches, especially double-edge corner cases (away *and* low/high at once). That's normal umpire variance, not an error in Mound.
 

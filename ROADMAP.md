@@ -4,14 +4,13 @@ Sensible next steps beyond the initial prototype, roughly grouped by theme. None
 
 ## More analysis
 
-- **Batter filtering and matchups.** Filter a pitcher's pitches by opposing batter, and support the inverse (a batter's pitches faced from a given pitcher) for pitcher-vs-batter matchup views.
-- **Chase rate.** Swing rate specifically on pitches outside the zone (pairs naturally with `in_zone`) — the counterpart to `swing_rate()`/`whiff_rate()`, which cover swings generally.
 - **Called-strike breakdown.** A more granular breakdown of `strike_rate()` into called strikes vs. swinging strikes vs. fouls.
 - **Game-to-game comparisons.** Build on `usage_rate()` to add e.g. `compare(collection_a, collection_b)` helpers that diff pitch mix, strike rate and location between two periods (the "pre vs. post All-Star break" pattern from the original example question).
 - **Automatic pitch-type normalization.** Statcast's own classification can be inconsistent game-to-game for pitches with unusual movement (see the Roki Sasaki splitter/forkball note in the README). A normalization layer could reconcile a pitcher's pitch types across a season using movement/velocity clustering rather than trusting each game's raw label.
 
 ## More visualization
 
+- **Color zone plots by pitch type or batter handedness.** `plot_zone()` already takes a `color_by` column internally, but the CLI has no `--color-by` flag to reach it, and `_color_for()` only recognizes pitch-type names -- pass `color_by="stand"` today and every point renders in the same default gray. Add a `mound zone --color-by {pitch_type,stand,none}` option (alongside the existing `--split-by`) plus a stand-aware color lookup, so lefties/righties can render as two distinct colors within one panel, as a lighter-weight alternative to `--split-by stand`'s separate side-by-side panels. Color choices to settle on: reuse two of the six categorical colors already backing `PITCH_TYPE_COLORS` (e.g. blue/orange) so pitch-type and stand coloring read as one consistent house palette, or pull a dedicated pair from a ColorBrewer categorical scheme (e.g. `Set2`/`Paired`) if stand should read as its own visually distinct family instead.
 - Movement plots (horizontal/vertical break) alongside location plots.
 - Release-point consistency plots across a start or season.
 - Overlaying multiple periods (e.g. pre/post All-Star break) on a single zone plot for direct comparison.
@@ -26,4 +25,5 @@ Sensible next steps beyond the initial prototype, roughly grouped by theme. None
 ## More discovery
 
 - **Additional player and game discovery tools.** Team rosters, schedules, and box-score lookups as their own CLI commands/Python functions, rather than only being usable indirectly through `Pitcher`.
-- Batter-side equivalents of `Pitcher`/`PitchCollection` for hitters.
+- **A CLI surface for the batter side.** `Batter` covers pitches faced in Python, but the CLI only reaches matchups from the pitcher's side (`--batter`). A `mound faced "Geraldo Perdomo" --last 5` (or a `mound matchup PITCHER BATTER` that prints mix, results and whiff/chase in one table) would close the gap. Worth settling first: whether a hitter's every-pitch-faced query is worth the fetch cost, since it means one Savant response per game played rather than per start.
+- **Hitter-side metrics.** `chase_rate()` and friends already work on a `Batter` collection, but plate-discipline framing (zone rate seen, swing decisions by count) and contact quality would make the batter side more than a mirror of the pitcher's numbers.
