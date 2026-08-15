@@ -350,13 +350,12 @@ function Clips() {
         <p className="mt-8 max-w-3xl text-sm leading-relaxed text-muted">
           Back-to-back triples off Edwin D&iacute;az in the ninth at Chase Field
           on Aug. 8, 2026. Both were four-seam fastballs in the middle third of
-          the zone, less than an inch off the center of the plate — the two
-          pitches at the center of the{" "}
+          the zone, less than an inch off the center of the plate. See a full walkthrough example of {" "}
           <a
             href={site.examples}
             className="text-grass-700 underline decoration-grass-700/30 underline-offset-4 transition hover:decoration-grass-700"
           >
-            blown-save walkthrough
+           another blown save by Diaz
           </a>
           .
         </p>
