@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import { site } from "@/lib/site";
 import "./globals.css";
 
@@ -42,6 +43,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">{children}</body>
+      {/* Skipped in development so local page loads don't land in the
+          reports. Loads after hydration and counts client-side route
+          changes, which the plain gtag snippet does not. */}
+      {process.env.NODE_ENV === "production" ? (
+        <GoogleAnalytics gaId={site.analyticsId} />
+      ) : null}
     </html>
   );
 }

@@ -10,6 +10,7 @@
     "sync": "node scripts/sync-content.mjs"
   },
   "dependencies": {
+    "@next/third-parties": "^16.3.1",
     "geist": "^1.7.2",
     "next": "16.3.1",
     "react": "19.2.8",

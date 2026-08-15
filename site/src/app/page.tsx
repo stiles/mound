@@ -273,8 +273,7 @@ function Plots() {
       </h2>
       <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted">
         A headline, a dek and a source line render around the strike zone
-        itself, so a plot is publishable the moment it comes out of the
-        function. All three are generated for you and all three are
+        itself, so a plot is publishable the moment it renders. All three are generated for you and all three are
         overridable.
       </p>
 
