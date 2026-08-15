@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 Format based on Keep a Changelog.
 
+## [0.7.1] - 2026-08-14
+
+### Added
+
+- A worked example in `docs/examples/diaz-blown-saves.md`, with `examples/diaz_blown_saves.py` as its runnable companion: fact-checking a closer's postgame explanation ("I was throwing my fastball right in the middle") against his pitch locations. Covers the path from a name to an answer -- finding a pitcher's recent games and their IDs, exporting every pitch, breaking down mix and arsenal by game, defining "the middle" against each batter's own zone, and pulling the video for the pitches that got hit.
+
+### Fixed
+
+- Games in progress are no longer cached. Caching keys on `game_pk` alone, on the premise that a finished game's data never changes -- but a game cached while it was still being played kept whatever partial feed existed at that moment, permanently, and a later query would silently come up short (a reliever who pitched the ninth simply missing from a game he appeared in). `fetch_game_feed()` now writes only feeds whose Savant game status reads final, and ignores a cached feed that doesn't, so entries already poisoned by an earlier version repair themselves on the next run once the game is over. A game still in progress re-fetches every time.
+
+### Changed
+
+- `plot_zone(kind="heatmap")` no longer draws a "Fewer"/"More" colorbar, matching `kind="kde"`, which dropped its own in 0.4.0. Darker already reads as more pitches, and the vertical bar shrank the plot area enough to push the strike zone and home plate off-center relative to every other plot kind -- a visible misalignment when heatmap and scatter panels sit side by side, and doubled in a `--split-by` pair.
+
 ## [0.7.0] - 2026-08-13
 
 ### Added

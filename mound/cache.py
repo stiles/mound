@@ -1,10 +1,14 @@
 """A local file cache for Baseball Savant game-feed responses.
 
 Keyed by ``game_pk`` since a finished game's Statcast data doesn't change --
-a cache hit is never stale. The Stats API game-log lookup (which discovers
-*which* ``game_pk``s exist) is cheap and always re-fetched fresh; only
-already-cached game feeds get skipped, so repeat queries automatically fetch
-just what's new since the last run without any separate "update" flag.
+a cache hit is never stale. Games still in progress are the exception, and
+are deliberately never written here; see
+:func:`mound.savant.fetch_game_feed`, which decides what's cacheable.
+
+The Stats API game-log lookup (which discovers *which* ``game_pk``s exist)
+is cheap and always re-fetched fresh; only already-cached game feeds get
+skipped, so repeat queries automatically fetch just what's new since the
+last run without any separate "update" flag.
 """
 
 from __future__ import annotations

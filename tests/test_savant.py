@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import pytest
+
 from mound.cache import FileCache
-from mound.savant import fetch_game_feed, game_pitches_for_batter, game_pitches_for_pitcher
-from tests.conftest import register_gf
+from mound.savant import (
+    fetch_game_feed,
+    game_pitches_for_batter,
+    game_pitches_for_pitcher,
+    is_final_feed,
+)
+from tests.conftest import load_fixture, register_gf, register_gf_payload
 
 
 def test_game_pitches_for_pitcher_normalizes_fields(mocked_responses):
@@ -155,3 +162,53 @@ def test_game_pitches_for_pitcher_uses_cache(mocked_responses, tmp_path):
 
     assert len(mocked_responses.calls) == 1
     assert len(first) == len(second) == 5
+
+
+@pytest.mark.parametrize("code", ["F", "FR", "FO", "FT", "O", "f"])
+def test_is_final_feed_accepts_completed_status_codes(code):
+    assert is_final_feed({"game_status_code": code}) is True
+
+
+@pytest.mark.parametrize("code", ["I", "S", "P", "PW", "U", "D", "", "???"])
+def test_is_final_feed_rejects_everything_else(code):
+    assert is_final_feed({"game_status_code": code}) is False
+
+
+def test_is_final_feed_treats_a_missing_status_as_not_final():
+    # Erring toward a re-fetch, so a renamed/dropped Savant field costs
+    # speed rather than correctness.
+    assert is_final_feed({"home_pitchers": {}}) is False
+
+
+def test_fetch_game_feed_does_not_cache_a_game_in_progress(mocked_responses, tmp_path):
+    in_progress = load_fixture("gf_game_1001.json") | {"game_status_code": "I"}
+    register_gf_payload(mocked_responses, 1001, in_progress)
+    cache = FileCache(tmp_path)
+
+    fetch_game_feed(1001, cache=cache)
+    fetch_game_feed(1001, cache=cache)
+
+    assert len(mocked_responses.calls) == 2  # re-fetched, not served from cache
+    assert not (tmp_path / "gf" / "1001.json").exists()
+
+
+def test_fetch_game_feed_ignores_a_cached_game_in_progress(mocked_responses, tmp_path):
+    # An entry written while the game was still being played: partial, and
+    # stale forever unless it's re-fetched once the game goes final.
+    cache = FileCache(tmp_path)
+    cache.set("gf/1001", {"game_status_code": "I", "home_pitchers": {}, "game_date": "2025-07-10"})
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    feed = fetch_game_feed(1001, cache=cache)
+
+    assert len(mocked_responses.calls) == 1
+    assert feed["game_status_code"] == "F"
+    assert cache.get("gf/1001")["game_status_code"] == "F"  # overwritten now it's final
+
+
+def test_game_pitches_for_pitcher_recovers_from_a_partial_cached_game(mocked_responses, tmp_path):
+    cache = FileCache(tmp_path)
+    cache.set("gf/1001", {"game_status_code": "I", "home_pitchers": {}, "game_date": "2025-07-10"})
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    assert len(game_pitches_for_pitcher(1001, 808963, cache=cache)) == 5

@@ -344,7 +344,11 @@ def _draw_panel(
                 df["plate_x"], df["plate_z"], bins=25, range=[PLOT_X_RANGE, PLOT_Z_RANGE]
             )
             masked = np.ma.masked_equal(heatmap, 0)
-            image = ax.imshow(
+            # No colorbar, matching the KDE branch: darker means more pitches
+            # is legible without one, and the vertical bar cost more than it
+            # explained -- it squeezed the panel narrower than every other
+            # plot kind, pulling the strike zone and plate off-center.
+            ax.imshow(
                 masked.T,
                 origin="lower",
                 extent=[*PLOT_X_RANGE, *PLOT_Z_RANGE],
@@ -352,12 +356,6 @@ def _draw_panel(
                 aspect="auto",
                 zorder=1,
             )
-            if heatmap.max() > 0:
-                cbar = ax.figure.colorbar(image, ax=ax, fraction=0.04, pad=0.06, shrink=0.85)
-                cbar.outline.set_visible(False)
-                cbar.set_ticks([1, heatmap.max()])
-                cbar.set_ticklabels(["Fewer", "More"])
-                cbar.ax.tick_params(length=0, labelsize=8.5, colors=FAINT)
     elif kind == "kde":
         _draw_kde(ax, df, bw_method)
     elif kind == "scatter":

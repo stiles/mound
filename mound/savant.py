@@ -20,22 +20,39 @@ if TYPE_CHECKING:
     from mound.cache import Cache
 
 
+# Savant reports MLB's own game status codes: "F" (final, plus its variants
+# for rain-shortened and forfeited games) and "O" (game over, the brief state
+# between the last out and the official final). Anything else -- scheduled,
+# in progress, suspended, postponed -- is a game whose feed can still gain
+# pitches, and an unrecognized or missing code is treated the same way, so a
+# changed API errs toward re-fetching rather than caching a partial game.
+FINAL_STATUS_CODES = frozenset({"F", "FR", "FO", "FT", "O"})
+
+
+def is_final_feed(feed: dict) -> bool:
+    """Whether a game feed covers a completed game, and so can't change again."""
+    code = str(feed.get("game_status_code") or feed.get("game_status") or "").strip().upper()
+    return code in FINAL_STATUS_CODES
+
+
 def fetch_game_feed(game_pk: int, cache: Cache | None = None) -> dict:
     """Fetch the raw Baseball Savant game-feed payload for one game.
 
-    A finished game's feed never changes, so if ``cache`` is given and
-    already has an entry for ``game_pk``, it's returned without a network
-    call; otherwise the response is fetched and written to the cache.
+    Only *finished* games are cached, in either direction: a feed fetched
+    mid-game is returned but not written, and a cached feed that turns out
+    to cover a game still in progress is ignored and re-fetched. So a live
+    game costs a request every time, and never leaves a partial inning
+    behind for later runs to trust.
     """
     cache_key = f"gf/{game_pk}"
     if cache is not None:
         cached = cache.get(cache_key)
-        if cached is not None:
+        if cached is not None and is_final_feed(cached):
             return cached
 
     data = get_json(config.SAVANT_GAMEFEED_URL, params={"game_pk": game_pk})
 
-    if cache is not None:
+    if cache is not None and is_final_feed(data):
         cache.set(cache_key, data)
 
     return data

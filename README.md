@@ -215,7 +215,7 @@ splitters.plot_zone(
 )
 ```
 
-`kind="heatmap"` bins pitches into a plain 2D histogram; `kind="kde"` renders a smoother kernel density surface instead (better suited to larger samples), via the optional `scipy` dependency (`pip install "mound[viz]"`). Pass `bw_method` to control its bandwidth, e.g. `plot_zone(kind="kde", bw_method=0.3)`.
+`kind="heatmap"` bins pitches into a plain 2D histogram; `kind="kde"` renders a smoother kernel density surface instead (better suited to larger samples), via the optional `scipy` dependency (`pip install "mound[viz]"`). Pass `bw_method` to control its bandwidth, e.g. `plot_zone(kind="kde", bw_method=0.3)`. Neither carries a colorbar — darker means more pitches, and a vertical scale bar would squeeze the panel out of alignment with every other plot kind.
 
 Pass `subtitle=""` or `source=""` to omit either. Passing your own `ax` (e.g. for a multi-panel figure) skips the dek/source and falls back to a plain left-aligned title, so `plot_zone()` behaves as a well-mannered subplot.
 
@@ -280,6 +280,8 @@ mound pitches "Roki Sasaki" --last 8 --cache
 
 Because a finished game's data never changes, a cache hit is never stale — calling again later for the same pitcher only fetches the starts it hasn't seen yet, without any separate "update" step. The cache defaults to `~/.cache/mound` (override with the `MOUND_CACHE_DIR` environment variable, `cache="/some/dir"`, or `--cache-dir`).
 
+A game still in progress is the exception, and Mound handles it for you: its feed is returned but never written to the cache, since tonight's fourth inning would otherwise be all you ever get for that game. Queries against a live game re-fetch every time, and go back to being cached once it's final.
+
 ## Video downloads
 
 Each pitch's `pitch_id` doubles as the `playId` on a Baseball Savant clip page, which embeds a direct broadcast clip:
@@ -319,6 +321,11 @@ mound video-id 7468ecb9-0918-3aca-8ef5-6396e6ab80c3
 
 Only the clip page's default embedded angle is captured this way (in practice, the home broadcast feed) — the page's away-broadcast toggle loads its clip via client-side JavaScript rather than a second tag in the page's HTML, so it isn't reachable with a plain request. Pitches with no video coverage are skipped with a warning by default; pass `skip_errors=False` to raise instead.
 
+## Examples
+
+- [Did Díaz miss "right in the middle"?](docs/examples/diaz-blown-saves.md) — a full walkthrough, from a pitcher's name to a fact-checked postgame quote: finding his recent games, pulling every pitch, breaking down the mix and arsenal, testing a claim about location against the data, and downloading the video. Runnable as `examples/diaz_blown_saves.py`.
+- `examples/roki_sasaki_end_to_end.py` — the shorter tour: retrieve, filter to one pitch type, calculate, plot, export.
+
 ## Data sources
 
 Mound calls two unofficial, public MLB data services directly:
@@ -340,7 +347,7 @@ Tests run entirely against mocked HTTP fixtures in `tests/fixtures/` (via the `r
 
 ## Known limitations
 
-- Caching is opt-in and off by default — every call re-fetches unless `cache=True`/`--cache` is given (see [Caching](#caching)).
+- Caching is opt-in and off by default — every call re-fetches unless `cache=True`/`--cache` is given, and games in progress are never cached (see [Caching](#caching)).
 - Pitch classification comes from Statcast's own model and can be inconsistent for pitches with unusual movement (see the Roki Sasaki note above).
 - `in_zone` is Statcast's calculated geometry, not the umpire's call, and `is_strike` isn't the same thing as "located in the zone" — see [`is_strike` vs. `in_zone`](#is_strike-vs-in_zone) above.
 - Only pitchers are supported as the primary retrieval unit; there's no batter-vs-pitcher matchup view yet (see [ROADMAP.md](ROADMAP.md)).

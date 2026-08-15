@@ -72,11 +72,16 @@ def register_game_log(
     )
 
 
-def register_gf(rsps: responses_lib.RequestsMock, game_pk: int, fixture_name: str) -> None:
+def register_gf_payload(rsps: responses_lib.RequestsMock, game_pk: int, payload: dict) -> None:
+    """Register an arbitrary game-feed payload, e.g. an edited fixture."""
     rsps.add(
         responses_lib.GET,
         config.SAVANT_GAMEFEED_URL,
-        json=load_fixture(fixture_name),
+        json=payload,
         status=200,
         match=[responses_lib.matchers.query_param_matcher({"game_pk": str(game_pk)})],
     )
+
+
+def register_gf(rsps: responses_lib.RequestsMock, game_pk: int, fixture_name: str) -> None:
+    register_gf_payload(rsps, game_pk, load_fixture(fixture_name))
