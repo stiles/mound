@@ -231,6 +231,22 @@ splitters.plot_zone(split_by="stand", out="splitter_zone_by_stand.png")
 mound zone "Roki Sasaki" --last 4 --pitch splitter --split-by stand --out splitter_zone_by_stand.png
 ```
 
+Or keep one panel and separate the two by color instead, with `color_by="stand"`:
+
+![Roki Sasaki splitter locations, colored by batter handedness](docs/images/roki_splitter_zone_color_by_stand.png)
+
+```python
+splitters.plot_zone(color_by="stand", out="splitter_zone_color_by_stand.png")
+```
+
+```bash
+mound zone "Roki Sasaki" --last 4 --pitch splitter --color-by stand --out splitter_zone_color_by_stand.png
+```
+
+Coloring holds the two groups against the same axes, which is the easier comparison on a small sample; splitting gives each side its own strike zone, drawn from the batters actually faced, which the single panel has to average into one box.
+
+Scatter points are colored by pitch type unless you say otherwise. A plot of one pitch type is the exception: the color would separate it from nothing and the headline already names the pitch, so it draws in a single house color instead — which is also what `color_by=None` (`--color-by none`) forces. Color is a scatter-only setting; heatmaps and KDE surfaces ignore it.
+
 ## `is_strike` vs. `in_zone`
 
 These sound interchangeable but aren't, and it's easy to expect a plotted zone box to reconcile with the wrong one:

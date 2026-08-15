@@ -6,12 +6,21 @@ matplotlib.use("Agg")
 
 from dataclasses import replace
 
+import matplotlib.pyplot as plt
 import pytest
+from matplotlib.colors import to_hex
 
 from mound.models import Pitch
 from mound.pitches import PitchCollection
 from mound.players import Player
-from mound.viz import _default_headline, _default_subtitle, plot_zone
+from mound.viz import (
+    DEFAULT_PITCH_COLOR,
+    PITCH_TYPE_COLORS,
+    STAND_COLORS,
+    _default_headline,
+    _default_subtitle,
+    plot_zone,
+)
 
 
 def _pitch(plate_x, plate_z, batter_stand, pitch_type="four-seam fastball") -> Pitch:
@@ -46,6 +55,12 @@ def _pitch(plate_x, plate_z, batter_stand, pitch_type="four-seam fastball") -> P
         at_bat_result=None,
         description=None,
     )
+
+
+@pytest.fixture(autouse=True)
+def _close_figures():
+    yield
+    plt.close("all")
 
 
 @pytest.fixture
@@ -91,8 +106,6 @@ def test_split_by_unknown_column_raises(mixed_stand_collection):
 
 
 def test_split_by_with_existing_ax_raises(mixed_stand_collection):
-    import matplotlib.pyplot as plt
-
     _, ax = plt.subplots()
     with pytest.raises(ValueError, match="cannot be combined"):
         plot_zone(mixed_stand_collection, split_by="stand", ax=ax)
@@ -147,6 +160,110 @@ def test_kde_on_single_point_collection_does_not_raise():
     ax = plot_zone(collection, kind="kde")
 
     assert ax.get_xlim() is not None
+
+
+def _scatter_colors(ax) -> list[str]:
+    """The color of each scatter series drawn on ``ax``, in draw order."""
+    return [to_hex(collection.get_facecolor()[0]) for collection in ax.collections]
+
+
+def _key_labels(ax) -> list[str]:
+    return [text.get_text() for text in ax.texts]
+
+
+def test_color_by_stand_draws_a_series_per_side(mixed_stand_collection):
+    ax = plot_zone(mixed_stand_collection, color_by="stand")
+
+    assert _scatter_colors(ax) == [
+        to_hex(STAND_COLORS["L"]),
+        to_hex(STAND_COLORS["R"]),
+    ]
+
+
+def test_color_by_stand_labels_the_key_by_handedness(mixed_stand_collection):
+    ax = plot_zone(mixed_stand_collection, color_by="stand")
+
+    assert _key_labels(ax) == ["\u25cf vs LHB", "\u25cf vs RHB"]
+
+
+def test_color_by_accepts_batter_stand_alias(mixed_stand_collection):
+    ax = plot_zone(mixed_stand_collection, color_by="batter_stand")
+
+    assert len(_scatter_colors(ax)) == 2
+
+
+def test_color_by_none_draws_one_series_and_no_key(mixed_stand_collection):
+    ax = plot_zone(mixed_stand_collection, color_by=None)
+
+    assert _scatter_colors(ax) == [to_hex(DEFAULT_PITCH_COLOR)]
+    assert _key_labels(ax) == []
+
+
+def test_color_by_unknown_column_raises(mixed_stand_collection):
+    with pytest.raises(ValueError, match="Cannot color_by"):
+        plot_zone(mixed_stand_collection, color_by="not_a_real_column")
+
+
+def test_color_by_pitch_type_orders_the_key_by_usage():
+    pitches = [_pitch(0.0, 2.0, "R", pitch_type="splitter") for _ in range(2)] + [
+        _pitch(0.1, 2.1, "R") for _ in range(5)
+    ]
+
+    ax = plot_zone(PitchCollection(pitches))
+
+    assert _key_labels(ax) == ["\u25cf four-seam fastball", "\u25cf splitter"]
+    assert _scatter_colors(ax) == [
+        to_hex(PITCH_TYPE_COLORS["four-seam fastball"]),
+        to_hex(PITCH_TYPE_COLORS["splitter"]),
+    ]
+
+
+def test_color_by_a_column_with_no_palette_draws_every_group_in_one_color(mixed_stand_collection):
+    pitches = mixed_stand_collection.pitches
+    pitches[0] = replace(pitches[0], batter_id=2, batter_name="Another Batter")
+
+    ax = plot_zone(PitchCollection(pitches), color_by="batter_name")
+
+    assert _scatter_colors(ax) == [to_hex(DEFAULT_PITCH_COLOR)] * 2
+
+
+def test_a_lone_pitch_type_drops_back_to_the_house_color(mixed_stand_collection):
+    # Every pitch here is a four-seamer, so its color would separate it from
+    # nothing; the headline already says what it is.
+    ax = plot_zone(mixed_stand_collection, color_by="pitch_type")
+
+    assert _scatter_colors(ax) == [to_hex(DEFAULT_PITCH_COLOR)]
+    assert _key_labels(ax) == []
+
+
+def test_a_lone_pitch_type_stays_in_the_house_color_when_faceted(mixed_stand_collection):
+    axes = plot_zone(mixed_stand_collection, color_by="pitch_type", split_by="stand")
+
+    for ax in axes:
+        assert _scatter_colors(ax) == [to_hex(DEFAULT_PITCH_COLOR)]
+
+
+def test_a_pitch_type_missing_from_one_panel_keeps_its_color_in_the_other():
+    # The frame as a whole has two pitch types, so color is doing work even
+    # in the panel that only shows one of them.
+    pitches = [_pitch(-0.3, 2.5, "L") for _ in range(3)] + [
+        _pitch(0.4, 2.2, "R", pitch_type="splitter") for _ in range(2)
+    ]
+
+    axes = plot_zone(PitchCollection(pitches), color_by="pitch_type", split_by="stand")
+
+    assert _scatter_colors(axes[0]) == [to_hex(PITCH_TYPE_COLORS["four-seam fastball"])]
+    assert _scatter_colors(axes[1]) == [to_hex(PITCH_TYPE_COLORS["splitter"])]
+
+
+def test_color_by_stand_within_split_by_stand_skips_a_redundant_key(mixed_stand_collection):
+    axes = plot_zone(mixed_stand_collection, color_by="stand", split_by="stand")
+
+    assert [_scatter_colors(ax) for ax in axes] == [
+        [to_hex(STAND_COLORS["L"])],
+        [to_hex(STAND_COLORS["R"])],
+    ]
+    assert _key_labels(axes[0]) == []
 
 
 def test_unknown_kind_raises(mixed_stand_collection):

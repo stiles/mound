@@ -70,14 +70,43 @@ PITCH_TYPE_COLORS: dict[str, str] = {
     "knuckleball": "#8E8E8E",
     "eephus": "#8E8E8E",
 }
-DEFAULT_PITCH_COLOR = "#4D4D4D"
+# The color for pitches with nothing to distinguish -- a single-color
+# scatter, or a value the active palette doesn't know. Green rather than a
+# neutral gray so an uncolored plot still belongs to the same family as the
+# density surfaces and the site (--color-grass-700).
+DEFAULT_PITCH_COLOR = "#1B6B47"
 
-# Density surfaces (heatmap/KDE) share one on-brand warm gradient rather
-# than a generic named colormap like "YlOrRd" -- it ends in the same red
-# used for pitch-type markers elsewhere, so a density plot and a scatter
-# plot of the same pitches read as siblings rather than unrelated tools.
+# Batter handedness runs the house green against the splitter's orange:
+# grass and clay, the same pairing the density ramp is built on. An earthier
+# clay tested better on paper and worse in practice -- green and clay
+# collapse into nearly the same olive under red-green color blindness (a 6
+# point lightness gap under protanopia), while this pair keeps 20 or more,
+# which is what actually separates the two sides for a reader who can't use
+# the hue difference.
+STAND_COLORS: dict[str, str] = {
+    "L": "#1B6B47",
+    "R": "#F18851",
+}
+
+# Which palette applies to which column. A column with no entry here (or a
+# value the palette doesn't know) falls back to DEFAULT_PITCH_COLOR.
+_COLUMN_COLORS: dict[str, dict[str, str]] = {
+    "pitch_type": PITCH_TYPE_COLORS,
+    "batter_stand": STAND_COLORS,
+}
+
+# Density surfaces (heatmap/KDE) share one sequential ramp: ColorBrewer's
+# 7-class YlGn, which already steps down in even increments of perceived
+# lightness (so it reads evenly and survives grayscale), plus one darker
+# stop of our own. YlGn ends at a medium-dark green, which left the hottest
+# cell short of the punch a peak should have; #0F3D2A is the site's own
+# darkest green, so the extra depth also lands the ramp on a color the page
+# around an embedded chart already uses. The yellow low end is deliberate --
+# it keeps a one-pitch bin visible against the plot background, which a
+# green that faint wouldn't be.
 DENSITY_CMAP = LinearSegmentedColormap.from_list(
-    "mound_density", ["#FFF9F0", "#FBDCB4", "#F5AE6B", "#F18851", "#C52622", "#6E0F0F"]
+    "mound_density",
+    ["#FFFFCC", "#D9F0A3", "#ADDD8E", "#78C679", "#41AB5D", "#238443", "#005A32", "#0F3D2A"],
 )
 
 # A KDE's raw density values skew heavily toward the low end (a long, faint
@@ -104,13 +133,20 @@ KDE_DEFAULT_BW = 0.45
 # than an amorphous cloud stretching to the plot's corners.
 KDE_MASK_FRACTION = 0.10
 
-# Human-readable panel titles for known ``split_by`` columns/values. Falls
-# back to ``str(value)`` for anything not listed here.
+# Human-readable panel titles and legend labels for known ``split_by``/
+# ``color_by`` columns and values. Falls back to ``str(value)`` for anything
+# not listed here.
 _FACET_LABELS: dict[str, dict[str, str]] = {
     "batter_stand": {"L": "vs LHB", "R": "vs RHB"},
 }
 _FACET_ORDER: dict[str, dict[str, int]] = {
     "batter_stand": {"L": 0, "R": 1},
+}
+
+# Friendlier names users can pass to ``split_by``/``color_by`` in place of
+# the underlying column.
+_COLUMN_ALIASES: dict[str, str] = {
+    "stand": "batter_stand",
 }
 
 MOUND_STYLE = {
@@ -127,14 +163,15 @@ MOUND_STYLE = {
 }
 
 
-def _color_for(pitch_type: str | None) -> str:
-    return PITCH_TYPE_COLORS.get(pitch_type or "", DEFAULT_PITCH_COLOR)
+def _color_for(column: str | None, value) -> str:
+    palette = _COLUMN_COLORS.get(column or "", {})
+    return palette.get(str(value), DEFAULT_PITCH_COLOR)
 
 
-def _resolve_split_column(split_by: str, df) -> str:
-    column = "batter_stand" if split_by in ("stand", "batter_stand") else split_by
+def _resolve_column(name: str, df, *, param: str) -> str:
+    column = _COLUMN_ALIASES.get(name, name)
     if column not in df.columns:
-        raise ValueError(f"Cannot split_by unknown column: {split_by!r}")
+        raise ValueError(f"Cannot {param} unknown column: {name!r}")
     return column
 
 
@@ -147,6 +184,19 @@ def _facet_values(column: str, df) -> list:
     order = _FACET_ORDER.get(column, {})
     values.sort(key=lambda v: (order.get(v, 99), str(v)))
     return values
+
+
+def _group_values(column: str, df) -> list:
+    """Order the values of a ``color_by`` column, for drawing and the key.
+
+    Columns with a natural order (handedness reads L then R, matching the
+    panel order ``split_by`` uses) follow it; everything else falls back to
+    most-common-first, so a pitch-type key doubles as a pitch mix and the
+    busiest group is drawn first, underneath the rest.
+    """
+    if column in _FACET_ORDER:
+        return _facet_values(column, df)
+    return list(df[column].value_counts().index)
 
 
 def _format_date(d: date) -> str:
@@ -251,20 +301,20 @@ def _style_axes(ax: Axes) -> None:
     ax.set_ylabel("")
 
 
-def _draw_legend_key(ax: Axes, labels: list[str]) -> None:
+def _draw_legend_key(ax: Axes, column: str, values: list) -> None:
     # A halo (rather than a boxed/framed legend) keeps the key legible over
     # dense clusters of points without adding a hard-edged UI element.
     halo = [path_effects.withStroke(linewidth=3, foreground=BACKGROUND)]
     y = 0.97
-    for label in labels:
+    for value in values:
         text = ax.text(
             0.04,
             y,
-            f"\u25cf {label}",
+            f"\u25cf {_facet_label(column, value)}",
             transform=ax.transAxes,
             fontsize=9.5,
             fontweight="medium",
-            color=_color_for(label),
+            color=_color_for(column, value),
             ha="left",
             va="top",
         )
@@ -326,17 +376,19 @@ def _draw_kde(ax: Axes, df, bw_method: float | str | None) -> None:
 
 
 def _draw_panel(
-    ax: Axes, df, kind: str, color_by: str | None, bw_method: float | str | None = None
-) -> list[str]:
+    ax: Axes, df, kind: str, color_column: str | None, bw_method: float | str | None = None
+) -> list:
     """Draw pitch markers plus home plate and strike zone onto ``ax``.
 
-    Returns the scatter group labels (for an optional legend key); empty
-    for heatmaps/KDE surfaces or single-color scatters.
+    ``color_column`` is an already-resolved DataFrame column (see
+    :func:`_resolve_column`). Returns the scatter group values, in the order
+    they were drawn, for an optional legend key; empty for heatmaps/KDE
+    surfaces or single-color scatters.
     """
     sz_top = df["sz_top"].mean() if not df.empty and df["sz_top"].notna().any() else DEFAULT_SZ_TOP
     sz_bot = df["sz_bot"].mean() if not df.empty and df["sz_bot"].notna().any() else DEFAULT_SZ_BOT
 
-    group_labels: list[str] = []
+    group_values: list = []
 
     if kind == "heatmap":
         if not df.empty:
@@ -359,21 +411,20 @@ def _draw_panel(
     elif kind == "kde":
         _draw_kde(ax, df, bw_method)
     elif kind == "scatter":
-        if not df.empty and color_by and color_by in df.columns:
-            counts = df[color_by].value_counts()
-            for value in counts.index:
-                group = df[df[color_by] == value]
+        if not df.empty and color_column:
+            group_values = _group_values(color_column, df)
+            for value in group_values:
+                group = df[df[color_column] == value]
                 ax.scatter(
                     group["plate_x"],
                     group["plate_z"],
-                    color=_color_for(str(value)),
+                    color=_color_for(color_column, value),
                     s=44,
                     alpha=0.85,
                     linewidths=0.6,
                     edgecolors=BACKGROUND,
                     zorder=2,
                 )
-            group_labels = [str(v) for v in counts.index]
         elif not df.empty:
             ax.scatter(
                 df["plate_x"],
@@ -390,7 +441,7 @@ def _draw_panel(
 
     _draw_home_plate(ax)
     _draw_strike_zone(ax, sz_top, sz_bot)
-    return group_labels
+    return group_values
 
 
 def _finish_panel(ax: Axes) -> None:
@@ -420,9 +471,14 @@ def plot_zone(
             a 2D-histogram density plot, or ``"kde"`` for a smoother kernel
             density estimate (requires the optional ``scipy`` dependency;
             install with ``pip install "mound[viz]"``).
-        color_by: column to color/group scatter points by (e.g.
-            ``"pitch_type"``); ignored for heatmaps/KDE. Pass ``None`` for a
-            single color.
+        color_by: column to color/group scatter points by, either
+            ``"pitch_type"`` (the default) or ``"stand"``/``"batter_stand"``
+            for a lefties/righties breakdown within one panel, as a lighter
+            alternative to ``split_by``'s separate panels. Ignored for
+            heatmaps/KDE. Pass ``None`` for a single color, which is also
+            what a column with only one value present falls back to. Any
+            other column works too, but its values share one color, since
+            only these two have a palette.
         split_by: column to facet into side-by-side panels, e.g.
             ``"stand"``/``"batter_stand"`` for a vs-lefties/vs-righties
             breakdown. One panel is drawn per non-null value present, each
@@ -448,12 +504,22 @@ def plot_zone(
         out: if given, save the figure to this path.
     """
     df = collection.to_frame().dropna(subset=["plate_x", "plate_z"])
+    color_column = _resolve_column(color_by, df, param="color_by") if color_by else None
+
+    # A color that separates nothing isn't worth spending: a plot of one
+    # pitch type has no second group to tell it apart from, and the headline
+    # already names it. Those fall back to the house color, which is also
+    # why no legend key is drawn for a single group. Decided against the
+    # whole frame rather than per panel, so a faceted figure can't end up
+    # with one panel keyed by color and another ignoring it.
+    if color_column and df[color_column].nunique() <= 1:
+        color_column = None
 
     if split_by is not None:
         if ax is not None:
             raise ValueError("split_by cannot be combined with an existing ax")
         return _plot_zone_faceted(
-            collection, df, kind, color_by, split_by, bw_method, title, subtitle, source, out
+            collection, df, kind, color_column, split_by, bw_method, title, subtitle, source, out
         )
 
     owns_figure = ax is None
@@ -465,9 +531,9 @@ def plot_zone(
         else:
             fig = ax.figure
 
-        group_labels = _draw_panel(ax, df, kind, color_by, bw_method)
-        if len(group_labels) > 1:
-            _draw_legend_key(ax, group_labels)
+        group_values = _draw_panel(ax, df, kind, color_column, bw_method)
+        if len(group_values) > 1:
+            _draw_legend_key(ax, color_column, group_values)
         _finish_panel(ax)
 
         headline = title if title is not None else _default_headline(collection, df)
@@ -488,7 +554,7 @@ def _plot_zone_faceted(
     collection: PitchCollection,
     df,
     kind: str,
-    color_by: str | None,
+    color_column: str | None,
     split_by: str,
     bw_method: float | str | None,
     title: str | None,
@@ -496,7 +562,7 @@ def _plot_zone_faceted(
     source: str,
     out: str | None,
 ):
-    column = _resolve_split_column(split_by, df)
+    column = _resolve_column(split_by, df, param="split_by")
     values = _facet_values(column, df)
     if not values:
         raise ValueError(f"No non-null values found for split_by={split_by!r}")
@@ -508,9 +574,9 @@ def _plot_zone_faceted(
 
         for i, (value, panel_ax) in enumerate(zip(values, axes, strict=True)):
             subset = df[df[column] == value]
-            group_labels = _draw_panel(panel_ax, subset, kind, color_by, bw_method)
-            if i == 0 and len(group_labels) > 1:
-                _draw_legend_key(panel_ax, group_labels)
+            group_values = _draw_panel(panel_ax, subset, kind, color_column, bw_method)
+            if i == 0 and len(group_values) > 1:
+                _draw_legend_key(panel_ax, color_column, group_values)
             _finish_panel(panel_ax)
             if i > 0:
                 panel_ax.tick_params(labelleft=False)

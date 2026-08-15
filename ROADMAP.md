@@ -10,7 +10,7 @@ Sensible next steps beyond the initial prototype, roughly grouped by theme. None
 
 ## More visualization
 
-- **Color zone plots by pitch type or batter handedness.** `plot_zone()` already takes a `color_by` column internally, but the CLI has no `--color-by` flag to reach it, and `_color_for()` only recognizes pitch-type names -- pass `color_by="stand"` today and every point renders in the same default gray. Add a `mound zone --color-by {pitch_type,stand,none}` option (alongside the existing `--split-by`) plus a stand-aware color lookup, so lefties/righties can render as two distinct colors within one panel, as a lighter-weight alternative to `--split-by stand`'s separate side-by-side panels. Color choices to settle on: reuse two of the six categorical colors already backing `PITCH_TYPE_COLORS` (e.g. blue/orange) so pitch-type and stand coloring read as one consistent house palette, or pull a dedicated pair from a ColorBrewer categorical scheme (e.g. `Set2`/`Paired`) if stand should read as its own visually distinct family instead.
+- **Color zone plots by outcome.** `color_by` now covers pitch type and batter handedness, but not what happened: a whiff, a called strike, a ball, a ball in play. Needs a palette that reads as a sequence (harmless to damaging) rather than as unordered categories, and a decision about whether the four Savant `pitch_call` families are the right grouping or too granular for one panel.
 - Movement plots (horizontal/vertical break) alongside location plots.
 - Release-point consistency plots across a start or season.
 - Overlaying multiple periods (e.g. pre/post All-Star break) on a single zone plot for direct comparison.

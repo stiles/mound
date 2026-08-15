@@ -8,6 +8,7 @@
     mound arsenal "Roki Sasaki" --last 8 --batter "Shohei Ohtani"
     mound zone "Roki Sasaki" --pitch splitter --last 4 --out zone.png
     mound zone "Roki Sasaki" --last 8 --split-by stand --out zone.png
+    mound zone "Roki Sasaki" --last 8 --color-by stand --out zone.png
     mound video "Roki Sasaki" --pitch splitter --last 4 --out-dir clips
     mound video "Roki Sasaki" --pitch splitter --last 1 --limit 1
     mound video "Roki Sasaki" --game 717404 --at-bat 34 --pitch-number 3
@@ -375,6 +376,11 @@ def zone(
     kind: str = typer.Option(
         "scatter", "--kind", help="'scatter', 'heatmap', or 'kde' (requires mound[viz])"
     ),
+    color_by: str = typer.Option(
+        "pitch_type",
+        "--color-by",
+        help="Color scatter points by 'pitch_type', 'stand' or 'none'",
+    ),
     split_by: str | None = typer.Option(
         None, "--split-by", help="Facet into side-by-side panels, e.g. 'stand'"
     ),
@@ -405,7 +411,15 @@ def zone(
         _fail("No pitches found for the given filters.")
 
     try:
-        collection.plot_zone(kind=kind, split_by=split_by, bw_method=bw_method, out=out)
+        collection.plot_zone(
+            kind=kind,
+            color_by=None if color_by.lower() == "none" else color_by,
+            split_by=split_by,
+            bw_method=bw_method,
+            out=out,
+        )
+    except ValueError as exc:
+        _fail(str(exc))
     except OSError as exc:
         _fail(f"Could not save plot to {out!r}: {exc.strerror or exc}")
     typer.echo(f"Saved plot of {len(collection)} pitch(es) to {out}")
