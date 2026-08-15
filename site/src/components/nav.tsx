@@ -6,7 +6,6 @@ import { ZoneMark } from "@/components/zone-mark";
 const links = [
   { label: "Docs", href: site.docs },
   { label: "Examples", href: site.examples },
-  { label: "Changelog", href: site.changelog },
 ];
 
 export function Nav() {

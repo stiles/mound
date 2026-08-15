@@ -7,10 +7,9 @@ const columns = [
   {
     heading: "Project",
     links: [
-      { label: "Documentation", href: site.docs },
+      { label: "Docs", href: site.docs },
       { label: "Examples", href: site.examples },
       { label: "Changelog", href: site.changelog },
-      { label: "Roadmap", href: `${site.repo}/blob/main/ROADMAP.md` },
     ],
   },
   {
