@@ -6,6 +6,14 @@ export function GitHubIcon({ className }: { className?: string }) {
   );
 }
 
+export function PlayIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" className={className}>
+      <path d="M4.5 2.4a.9.9 0 0 1 1.36-.77l7.2 4.37a.9.9 0 0 1 0 1.54l-7.2 4.37a.9.9 0 0 1-1.36-.77V2.4Z" />
+    </svg>
+  );
+}
+
 export function ArrowIcon({ className }: { className?: string }) {
   return (
     <svg

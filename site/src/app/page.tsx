@@ -1,4 +1,6 @@
 import Image from "next/image";
+import { ClipCard } from "@/components/clip-card";
+import { CommandBlock } from "@/components/command-block";
 import { CopyCommand } from "@/components/copy-command";
 import { Footer } from "@/components/footer";
 import { ArrowIcon, GitHubIcon } from "@/components/icons";
@@ -7,6 +9,7 @@ import { RotatingHeadline } from "@/components/rotating-headline";
 import { Terminal } from "@/components/terminal";
 import {
   arsenal,
+  clips,
   features,
   heroCommand,
   heroOutput,
@@ -28,6 +31,7 @@ export default function Home() {
         <Features />
         <Arsenal />
         <Plots />
+        <Clips />
         <GetStarted />
       </main>
       <Footer />
@@ -314,6 +318,46 @@ function Plots() {
           </p>
         </figcaption>
       </figure>
+    </section>
+  );
+}
+
+function Clips() {
+  return (
+    <section className="border-y border-ink/10 bg-paper">
+      <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-28">
+        <h2 className="max-w-3xl text-section font-semibold text-balance">
+          Then watch the pitch that did the damage.
+        </h2>
+        <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted">
+          Every pitch carries a{" "}
+          <code className="font-mono text-base text-grass-700">pitch_id</code>{" "}
+          that doubles as the play ID on a Baseball Savant clip page. Any pitch
+          you can filter to is a pitch you can download.
+        </p>
+
+        <CommandBlock commands={clips.commands} className="mt-10" />
+
+        <div className="mt-8 grid gap-8 sm:grid-cols-2">
+          {clips.cards.map((clip) => (
+            <ClipCard key={clip.youtube} {...clip} />
+          ))}
+        </div>
+
+        <p className="mt-8 max-w-3xl text-sm leading-relaxed text-muted">
+          Back-to-back triples off Edwin D&iacute;az in the ninth at Chase Field
+          on Aug. 8, 2026. Both were four-seam fastballs in the middle third of
+          the zone, less than an inch off the center of the plate — the two
+          pitches at the center of the{" "}
+          <a
+            href={site.examples}
+            className="text-grass-700 underline decoration-grass-700/30 underline-offset-4 transition hover:decoration-grass-700"
+          >
+            blown-save walkthrough
+          </a>
+          .
+        </p>
+      </div>
     </section>
   );
 }

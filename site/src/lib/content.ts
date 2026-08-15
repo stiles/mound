@@ -123,6 +123,34 @@ export const plots = [
   },
 ];
 
+/** The commands, pitch IDs and pitch details come from step 7 of the Díaz
+ *  walkthrough. The poster frames are pulled from the clips those commands
+ *  downloaded; only the YouTube IDs originate outside the repo. */
+export const clips = {
+  commands: [
+    "mound video-id a08dfb7d-1acd-3776-a6d8-0f5e80cdb0c6 --out clips/perdomo_triple_aug8.mp4",
+    "mound video-id 13f4b8d1-39f4-3499-b696-8a3311899fde --out clips/carroll_triple_aug8.mp4",
+  ],
+  cards: [
+    {
+      youtube: "GBGhs2vNCeI",
+      poster: "/clips/perdomo-triple-aug8.jpg",
+      batter: "Geraldo Perdomo",
+      result: "Triple",
+      detail:
+        "Four-seam fastball, 96.5 mph, middle third of the zone and 0.06 feet off the center of the plate.",
+    },
+    {
+      youtube: "fB3AgDta6dU",
+      poster: "/clips/carroll-triple-aug8.jpg",
+      batter: "Corbin Carroll",
+      result: "Triple",
+      detail:
+        "Four-seam fastball, 98.6 mph, middle third of the zone and 0.07 feet off the center of the plate.",
+    },
+  ],
+};
+
 export const splitPlot = {
   src: "/plots/roki_splitter_zone_by_stand.png",
   width: 1865,

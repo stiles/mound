@@ -17,6 +17,6 @@ sandbox/
 .ipynb_checkpoints/
 .DS_Store
 .env
-cache/
-clips/
+/cache/
+/clips/
 .cursor/
