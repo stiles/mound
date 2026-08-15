@@ -92,6 +92,16 @@ body {
   --tw-prose-td-borders: color-mix(in srgb, var(--color-ink) 10%, transparent);
 }
 
+/* Identifiers like Pitcher("Roki Sasaki").pitches(last=5) run to 64
+   characters, which is wider than a phone and won't break on its own. */
+.prose-mound {
+  overflow-wrap: break-word;
+}
+
+.prose-mound .table-scroll {
+  overflow-x: auto;
+}
+
 .prose-mound a {
   text-decoration-color: color-mix(in srgb, var(--color-grass-700) 35%, transparent);
   text-underline-offset: 4px;

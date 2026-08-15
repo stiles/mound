@@ -162,32 +162,36 @@ function Arsenal() {
     <section className="border-y border-ink/10 bg-paper">
       <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-28">
         <div className="grid gap-14 lg:grid-cols-[1.55fr_1fr] lg:gap-20">
-          <div>
+          {/* min-w-0: a grid item defaults to min-width:auto, so without this
+              the table's min width props the whole page open on a phone. */}
+          <div className="min-w-0">
             <h2 className="text-section font-semibold text-balance">
               Three angles on &ldquo;how nasty was it?&rdquo;
             </h2>
 
             <div className="mt-10 overflow-x-auto">
-              <table className="w-full min-w-lg border-collapse text-sm">
+              <table className="w-full border-collapse text-sm sm:min-w-lg">
                 <caption className="mb-4 text-left font-mono text-xs tracking-widest text-muted uppercase">
                   {arsenal.caption}
                 </caption>
                 <thead>
                   <tr className="border-b border-ink/20 text-left">
                     <th className="pb-3 font-medium text-muted">Pitch</th>
-                    <th className="pb-3 text-right font-medium text-muted">
+                    <th className="pb-3 pl-3 text-right font-medium text-muted">
                       No.
                     </th>
-                    <th className="pb-3 text-right font-medium text-muted">
+                    <th className="pb-3 pl-3 text-right font-medium text-muted">
                       Velo
                     </th>
-                    <th className="pb-3 text-right font-medium text-muted">
+                    {/* Velo, whiff and chase carry the point of the section;
+                        spin is context, so it waits for a wider screen. */}
+                    <th className="hidden pb-3 pl-3 text-right font-medium text-muted sm:table-cell">
                       Spin
                     </th>
-                    <th className="pb-3 text-right font-medium text-muted">
+                    <th className="pb-3 pl-3 text-right font-medium text-muted">
                       Whiff
                     </th>
-                    <th className="pb-3 text-right font-medium text-muted">
+                    <th className="pb-3 pl-3 text-right font-medium text-muted">
                       Chase
                     </th>
                   </tr>
@@ -206,19 +210,19 @@ function Arsenal() {
                           </span>
                         </span>
                       </td>
-                      <td className="py-3.5 text-right font-mono tabular-nums text-ink">
+                      <td className="py-3.5 pl-3 text-right font-mono tabular-nums text-ink">
                         {row.pitches}
                       </td>
-                      <td className="py-3.5 text-right font-mono tabular-nums text-ink">
+                      <td className="py-3.5 pl-3 text-right font-mono tabular-nums text-ink">
                         {row.velocity.toFixed(1)}
                       </td>
-                      <td className="py-3.5 text-right font-mono tabular-nums text-muted">
+                      <td className="hidden py-3.5 pl-3 text-right font-mono tabular-nums text-muted sm:table-cell">
                         {row.spin.toFixed(1)}
                       </td>
-                      <td className="py-3.5 text-right font-mono tabular-nums text-ink">
+                      <td className="py-3.5 pl-3 text-right font-mono tabular-nums text-ink">
                         {row.whiff.toFixed(1)}%
                       </td>
-                      <td className="py-3.5 text-right font-mono tabular-nums text-ink">
+                      <td className="py-3.5 pl-3 text-right font-mono tabular-nums text-ink">
                         {row.chase.toFixed(1)}%
                       </td>
                     </tr>

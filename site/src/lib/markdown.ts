@@ -7,7 +7,7 @@ import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import remarkSmartypants from "remark-smartypants";
 import { unified } from "unified";
-import { visit } from "unist-util-visit";
+import { SKIP, visit } from "unist-util-visit";
 import type { Element, Root } from "hast";
 import { moundDark } from "@/lib/code-theme";
 import { site } from "@/lib/site";
@@ -54,6 +54,26 @@ function rewriteRepoPaths() {
   };
 }
 
+/** A wide table in normal flow drags the whole page wider than a phone
+ *  viewport, so each one gets its own scroll container. */
+function wrapTables() {
+  return (tree: Root) => {
+    visit(tree, "element", (node: Element, index, parent) => {
+      if (node.tagName !== "table" || !parent || index === undefined) return;
+
+      const wrapper: Element = {
+        type: "element",
+        tagName: "div",
+        properties: { className: ["table-scroll"] },
+        children: [node],
+      };
+      parent.children[index] = wrapper;
+
+      return [SKIP, index + 1];
+    });
+  };
+}
+
 const processor = unified()
   .use(remarkParse)
   .use(remarkGfm)
@@ -63,6 +83,7 @@ const processor = unified()
   .use(remarkSmartypants)
   .use(remarkRehype)
   .use(rewriteRepoPaths)
+  .use(wrapTables)
   .use(rehypeSlug)
   .use(rehypeAutolinkHeadings, {
     behavior: "wrap",
