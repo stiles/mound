@@ -24,15 +24,20 @@ export function Nav() {
         </Link>
 
         <div className="flex items-center gap-1 sm:gap-2">
-          {links.map((link) => (
-            <a
-              key={link.label}
-              href={link.href}
-              className="rounded-md px-3 py-2 text-sm font-medium text-muted transition hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-grass-700"
-            >
-              {link.label}
-            </a>
-          ))}
+          {links.map((link) => {
+            const className =
+              "rounded-md px-3 py-2 text-sm font-medium text-muted transition hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-grass-700";
+
+            return link.href.startsWith("/") ? (
+              <Link key={link.label} href={link.href} className={className}>
+                {link.label}
+              </Link>
+            ) : (
+              <a key={link.label} href={link.href} className={className}>
+                {link.label}
+              </a>
+            );
+          })}
           <a
             href={site.repo}
             aria-label="Mound on GitHub"

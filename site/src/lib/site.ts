@@ -7,8 +7,7 @@ export const site = {
   repo: "https://github.com/stiles/mound",
   pypi: "https://pypi.org/project/mound/",
   docs: "https://github.com/stiles/mound#readme",
-  examples:
-    "https://github.com/stiles/mound/blob/main/docs/examples/diaz-blown-saves.md",
-  changelog: "https://github.com/stiles/mound/blob/main/CHANGELOG.md",
+  examples: "/examples",
+  changelog: "/changelog",
   author: "Matt Stiles",
 } as const;

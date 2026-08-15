@@ -104,7 +104,7 @@ export const features = [
 
 export const plots = [
   {
-    src: "/plots/roki_splitter_zone.png",
+    src: "/docs-images/roki_splitter_zone.png",
     width: 1005,
     height: 1289,
     label: 'kind="scatter"',
@@ -113,7 +113,7 @@ export const plots = [
     alt: "Strike zone scatter plot of Roki Sasaki's splitter locations",
   },
   {
-    src: "/plots/diaz_ff_season_heatmap.png",
+    src: "/docs-images/diaz_ff_season_heatmap.png",
     width: 1005,
     height: 1289,
     label: 'kind="heatmap"',
@@ -152,7 +152,7 @@ export const clips = {
 };
 
 export const splitPlot = {
-  src: "/plots/roki_splitter_zone_by_stand.png",
+  src: "/docs-images/roki_splitter_zone_by_stand.png",
   width: 1865,
   height: 1289,
   label: 'split_by="stand"',

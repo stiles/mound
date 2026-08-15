@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* Ink, paper, muted, line and the pitch-type colors are lifted from
    mound/viz.py so a chart screenshot and the page around it match. */
@@ -70,6 +71,91 @@ body {
       transparent 1px
     );
   background-size: 64px 74px;
+}
+
+/* Long-form pages rendered from the repo's own markdown. Unlayered on
+   purpose, so these win over the typography plugin's layered defaults. */
+.prose-mound {
+  --tw-prose-body: var(--color-ink);
+  --tw-prose-headings: var(--color-ink);
+  --tw-prose-lead: var(--color-muted);
+  --tw-prose-links: var(--color-grass-700);
+  --tw-prose-bold: var(--color-ink);
+  --tw-prose-counters: var(--color-muted);
+  --tw-prose-bullets: var(--color-line);
+  --tw-prose-hr: color-mix(in srgb, var(--color-ink) 12%, transparent);
+  --tw-prose-quotes: var(--color-ink);
+  --tw-prose-quote-borders: var(--color-grass-500);
+  --tw-prose-captions: var(--color-muted);
+  --tw-prose-code: var(--color-ink);
+  --tw-prose-th-borders: color-mix(in srgb, var(--color-ink) 22%, transparent);
+  --tw-prose-td-borders: color-mix(in srgb, var(--color-ink) 10%, transparent);
+}
+
+.prose-mound a {
+  text-decoration-color: color-mix(in srgb, var(--color-grass-700) 35%, transparent);
+  text-underline-offset: 4px;
+}
+
+.prose-mound a:hover {
+  text-decoration-color: var(--color-grass-700);
+}
+
+.prose-mound .heading-anchor {
+  color: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+
+.prose-mound .heading-anchor:hover {
+  color: var(--color-grass-700);
+}
+
+.prose-mound pre {
+  overflow-x: auto;
+  padding: 1.05rem 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--color-grass-800) 65%, transparent);
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.75;
+}
+
+/* Changelog entries name a lot of flags and functions, so inline code stays
+   a neutral tint — green here would out-shout the links and the brand. */
+.prose-mound :not(pre) > code {
+  /* The negative margin cancels the padding's optical gap, so a comma after
+     a code span sits where a comma should rather than a space away. */
+  padding: 0.12em 0.32em;
+  margin-inline: -0.14em;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--color-ink) 6%, transparent);
+  color: color-mix(in srgb, var(--color-ink) 88%, var(--color-grass-900));
+  font-size: 0.875em;
+  font-weight: 450;
+}
+
+.prose-mound :not(pre) > code::before,
+.prose-mound :not(pre) > code::after {
+  content: none;
+}
+
+.prose-mound blockquote {
+  font-style: normal;
+  padding-block: 0.15rem;
+}
+
+.prose-mound blockquote p:first-of-type::before,
+.prose-mound blockquote p:last-of-type::after {
+  content: none;
+}
+
+.prose-mound img {
+  border: 1px solid color-mix(in srgb, var(--color-ink) 10%, transparent);
+  border-radius: 0.75rem;
+}
+
+.prose-mound table {
+  font-size: 0.875rem;
 }
 
 /* The hero terminal types itself in CSS rather than JS, so the command and

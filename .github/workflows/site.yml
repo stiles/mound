@@ -5,10 +5,14 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "CHANGELOG.md"
+      - "docs/**"
       - ".github/workflows/site.yml"
   pull_request:
     paths:
       - "site/**"
+      - "CHANGELOG.md"
+      - "docs/**"
       - ".github/workflows/site.yml"
 
 defaults:
@@ -29,6 +33,18 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      # The changelog and examples pages render from copies of the repo's
+      # markdown, committed so the Vercel build never reaches above site/.
+      # Re-running the copy here is what keeps those copies honest.
+      - name: Check synced content is current
+        run: |
+          npm run sync
+          if [ -n "$(git status --porcelain -- content public/docs-images)" ]; then
+            echo "::error::Synced content is stale. Run 'npm run sync' in site/ and commit the result."
+            git status --short -- content public/docs-images
+            exit 1
+          fi
 
       - name: Lint
         run: npm run lint

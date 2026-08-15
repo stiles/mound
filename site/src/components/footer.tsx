@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { site } from "@/lib/site";
 import { GitHubIcon } from "@/components/icons";
 import { ZoneMark } from "@/components/zone-mark";
@@ -60,12 +61,21 @@ export function Footer() {
               <ul className="mt-4 space-y-2.5">
                 {column.links.map((link) => (
                   <li key={link.label}>
-                    <a
-                      href={link.href}
-                      className="text-sm text-chalk/70 transition hover:text-chalk"
-                    >
-                      {link.label}
-                    </a>
+                    {link.href.startsWith("/") ? (
+                      <Link
+                        href={link.href}
+                        className="text-sm text-chalk/70 transition hover:text-chalk"
+                      >
+                        {link.label}
+                      </Link>
+                    ) : (
+                      <a
+                        href={link.href}
+                        className="text-sm text-chalk/70 transition hover:text-chalk"
+                      >
+                        {link.label}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>
