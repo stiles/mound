@@ -109,7 +109,7 @@ export const plots = [
     height: 1289,
     label: 'kind="scatter"',
     caption:
-      "The default. Points colored by pitch type, using the same fixed palette across every chart.",
+      "The default. Points are colored by pitch type when a plot shows more than one, from a palette fixed by pitch name rather than assigned per chart.",
     alt: "Strike zone scatter plot of Roki Sasaki's splitter locations",
   },
   {
