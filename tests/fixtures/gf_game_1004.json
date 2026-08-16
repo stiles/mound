@@ -133,8 +133,8 @@
         "plate_z": 2.5,
         "px": -0.1,
         "pz": 2.5,
-        "result": null,
-        "des": null,
+        "result": "Strikeout",
+        "des": "Test Batter 1 strikes out swinging.",
         "game_pk": "1004"
       },
       {

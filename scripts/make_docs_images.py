@@ -49,12 +49,14 @@ def main() -> None:
     splitters.plot_zone(
         color_by="stand", out=str(IMAGES / "roki_splitter_zone_color_by_stand.png")
     )
+    splitters.plot_zone(grid=True, out=str(IMAGES / "roki_splitter_zone_grid.png"))
 
     diaz = Pitcher("Edwin Díaz")
     season_ff = diaz.pitches(**DIAZ_SEASON, pitch_type="fastball", cache=cache)
     print(f"Díaz: {len(season_ff)} fastballs through Aug 13")
 
     season_ff.plot_zone(kind="heatmap", out=str(IMAGES / "diaz_ff_season_heatmap.png"))
+    season_ff.plot_zone(kind="zones", out=str(IMAGES / "diaz_ff_season_zones.png"))
     season_ff.filter(game=BLOWN_SAVE_GAME).plot_zone(
         out=str(IMAGES / "diaz_ff_aug13_zone.png")
     )

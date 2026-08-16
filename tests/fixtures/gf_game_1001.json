@@ -32,8 +32,8 @@
         "plate_z": 2.5,
         "px": -0.2,
         "pz": 2.5,
-        "result": null,
-        "des": null,
+        "result": "Strikeout",
+        "des": "Test Batter 1 strikes out swinging.",
         "game_pk": "1001",
         "spin_rate": 2450,
         "extension": 6.7,
@@ -71,8 +71,8 @@
         "plate_z": 1.8,
         "px": -0.6,
         "pz": 1.8,
-        "result": null,
-        "des": null,
+        "result": "Strikeout",
+        "des": "Test Batter 1 strikes out swinging.",
         "game_pk": "1001"
       },
       {
@@ -137,8 +137,8 @@
         "plate_z": 2.2,
         "px": 0.9,
         "pz": 2.2,
-        "result": null,
-        "des": null,
+        "result": "Walk",
+        "des": "Test Batter 2 walks.",
         "game_pk": "1001"
       },
       {

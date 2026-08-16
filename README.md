@@ -60,7 +60,16 @@ mound results "Roki Sasaki" --last 4 --batter "Geraldo Perdomo"
 # Plot pitch locations against the strike zone
 mound zone "Roki Sasaki" --pitch splitter --last 4 --out splitter_zone.png
 
-# Export the underlying data
+# Or count them into the numbered zones instead of plotting each one
+mound zone "Roki Sasaki" --pitch splitter --last 4 --kind zones --out splitter_zones.png
+
+# Just the pitch each at-bat ended on, one row per plate appearance
+mound pitches "Roki Sasaki" --last 1 --ends-at-bat
+
+# Narrow to Statcast's numbered zones: 1-9 in the zone, 11-14 outside it
+mound pitches "Roki Sasaki" --last 4 --zone 5
+
+Could we also derive an MLB zone from the pitch? # Export the underlying data
 mound pitches "Roki Sasaki" --last 4 --export roki_last4.csv
 
 # Cache Savant responses locally; a later run for the same pitcher only
@@ -121,6 +130,8 @@ splitters.download_videos(out_dir="clips")
 | `batter` | an opposing hitter, by name or MLB player ID (see [Matchups](#matchups)) |
 | `at_bat_number` | a specific at-bat — pair with `game`, since it's only unique within one game |
 | `pitch_number` | a specific pitch within that at-bat (e.g. `3` for the third pitch) — pair with `game` and `at_bat_number` to land on one exact pitch |
+
+`.filter()` additionally takes what Mound derives rather than retrieves — `is_strike`, `in_zone` (see [`is_strike` vs. `in_zone`](#is_strike-vs-in_zone)), `zone` (see [Zones](#zones)) and `ends_at_bat` (see [At-bat outcomes](#at-bat-outcomes)) — since those only make sense once the data is in hand.
 
 Filtering a `PitchCollection` always returns another `PitchCollection`, so any combination of `.filter()`, `.pitch_mix()`, `.strike_rate()`, `.plot_zone()` and export methods composes freely.
 
@@ -210,12 +221,30 @@ splitters.plot_zone(
     title="Sasaki leans on the splitter",
     subtitle="134 pitches since the All-Star break",
     source="Source: Baseball Savant",
-    kind="heatmap",  # "scatter" (default), "heatmap", or "kde"
+    kind="heatmap",  # "scatter" (default), "heatmap", "zones", or "kde"
     out="splitter_zone.png",
 )
 ```
 
 `kind="heatmap"` bins pitches into a plain 2D histogram; `kind="kde"` renders a smoother kernel density surface instead (better suited to larger samples), via the optional `scipy` dependency (`pip install "mound[viz]"`). Pass `bw_method` to control its bandwidth, e.g. `plot_zone(kind="kde", bw_method=0.3)`. Neither carries a colorbar — darker means more pitches, and a vertical scale bar would squeeze the panel out of alignment with every other plot kind.
+
+`kind="zones"` counts pitches into [Statcast's numbered zones](#zones) rather than into bins of its own, so the picture is labeled in the same 1-9 and 11-14 that `zone` and `--zone` take:
+
+![Edwin Díaz's four-seam fastball counted into Statcast's zones](docs/images/diaz_ff_season_zones.png)
+
+```bash
+mound zone "Edwin Díaz" --since 2026-03-01 --pitch fastball --kind zones --out diaz_ff_season_zones.png
+```
+
+Only the nine in-zone cells are shaded. Zones 11-14 run out to wherever a pitch landed, so they collect more pitches than any single cell almost by definition; putting them on the same ramp would darken the border and flatten the nine cells that are the point of the chart, so they carry their counts as numbers instead. The heavy line stands in for the strike zone the other kinds draw and sits a ball radius outside it, because that wider edge is the one the numbering is cut on. Each panel scales to its own busiest cell, so a `split_by` pair shows the shape of each side rather than their relative volume — the counts are there for that.
+
+A scatter, heatmap or KDE surface can carry the grid without the counts, with `grid=True` (`--grid`), which is the cheapest way to read a plot against the zones a `--zone` filter would return:
+
+![Roki Sasaki's splitter locations over the 3x3 zone grid](docs/images/roki_splitter_zone_grid.png)
+
+```python
+splitters.plot_zone(grid=True, out="splitter_zone_grid.png")
+```
 
 Pass `subtitle=""` or `source=""` to omit either. Passing your own `ax` (e.g. for a multi-panel figure) skips the dek/source and falls back to a plain left-aligned title, so `plot_zone()` behaves as a well-mannered subplot.
 
@@ -245,7 +274,25 @@ mound zone "Roki Sasaki" --last 4 --pitch splitter --color-by stand --out splitt
 
 Coloring holds the two groups against the same axes, which is the easier comparison on a small sample; splitting gives each side its own strike zone, drawn from the batters actually faced, which the single panel has to average into one box.
 
-Scatter points are colored by pitch type unless you say otherwise. A plot of one pitch type is the exception: the color would separate it from nothing and the headline already names the pitch, so it draws in a single house color instead — which is also what `color_by=None` (`--color-by none`) forces. Color is a scatter-only setting; heatmaps and KDE surfaces ignore it.
+Scatter points are colored by pitch type unless you say otherwise. A plot of one pitch type is the exception: the color would separate it from nothing and the headline already names the pitch, so it draws in a single house color instead — which is also what `color_by=None` (`--color-by none`) forces. Color is a scatter-only setting; heatmaps, zone counts and KDE surfaces ignore it.
+
+## At-bat outcomes
+
+`at_bat_result` and `description` describe the plate appearance, not the pitch, and Savant stamps both onto every pitch of the at-bat. Read a pitch table straight and a five-pitch strikeout looks like five strikeouts.
+
+`ends_at_bat` marks the pitch each at-bat ended on, which is the row those two fields belong to:
+
+```bash
+mound pitches "Edwin Díaz" --game 823915 --ends-at-bat
+```
+
+```python
+game.filter(ends_at_bat=True)   # one row per plate appearance
+```
+
+It's derived from the game feed as pitches are parsed rather than read off a pitch, so it survives narrowing: filtering to changeups first won't promote an at-bat's last changeup into its last pitch. Two edges are worth knowing. An at-bat still being pitched marks nothing, since nothing has ended it yet. And an at-bat that ends on a throw instead of a pitch — a runner caught stealing for the third out, roughly one at-bat in 500 — still marks its last pitch, which is where the record ends even though that pitch didn't decide it.
+
+`mound pitches` prints `at_bat_result` only on the row that produced it, for the same reason.
 
 ## `is_strike` vs. `in_zone`
 
@@ -256,7 +303,25 @@ These sound interchangeable but aren't, and it's easy to expect a plotted zone b
 
 A good chase pitch (splitters, sweepers, low sinkers) will show a much higher `is_strike` rate than `in_zone` rate. That's the pitch working as intended, not a bug — batters are swinging at (or getting jammed by) pitches outside the zone on purpose, which is exactly what [`chase_rate()`](#whiff-rate-chase-rate-and-pitch-metrics) measures. If a `plot_zone()` subtitle's strike percentage doesn't match how many dots visually sit inside the drawn box, that's this distinction at work; check `in_zone` counts (or `.filter(in_zone=True)`) for the locational answer, not `strike_rate()`.
 
-`in_zone` models the ball as a sphere overlapping the zone rectangle, which matches Statcast's own methodology (checked against Baseball Savant's own `zone`/`isInZone` fields across thousands of live pitches with zero mismatches). One consequence: a pitch can register `in_zone=True` even when its center is outside the box on *both* axes at once, as long as it's within one ball radius of a corner — a legitimate, if visually surprising, edge case. `in_zone` also reflects Statcast's calculated geometry, not the home-plate umpire's real-time call; the two disagree routinely on borderline pitches, especially double-edge corner cases (away *and* low/high at once). That's normal umpire variance, not an error in Mound.
+`in_zone` models the ball as a sphere overlapping the zone rectangle, which matches Statcast's own methodology (checked against Baseball Savant's own `isInZone` field across 42,538 cached pitches with zero mismatches — see [Zones](#zones)). One consequence: a pitch can register `in_zone=True` even when its center is outside the box on *both* axes at once, as long as it's within one ball radius of a corner — a legitimate, if visually surprising, edge case. `in_zone` also reflects Statcast's calculated geometry, not the home-plate umpire's real-time call; the two disagree routinely on borderline pitches, especially double-edge corner cases (away *and* low/high at once). That's normal umpire variance, not an error in Mound.
+
+## Zones
+
+Every pitch carries `zone`, Statcast's numbered zones as they appear on Baseball Savant: 1-9 across the strike zone, read like a book from the catcher's view, and 11-14 for the quadrants outside it. There is no zone 10.
+
+```bash
+mound pitches "Roki Sasaki" --last 4 --zone 5        # the heart of the plate
+mound pitches "Roki Sasaki" --last 4 --zone 11,12,13,14
+```
+
+```python
+roki.pitches(last=4).filter(zone=5)
+roki.pitches(last=4).filter(zone=[7, 8, 9]).whiff_rate()   # down in the zone
+```
+
+Mound derives this from the pitch's own coordinates rather than reading Savant's `zone` field, the same way it derives `in_zone`, so the two can't drift apart. Reproducing Savant exactly takes three details: the grid is drawn over the zone grown by one ball radius, so a pitch an inch above `sz_top` is zone 1 rather than 11; the thirds are cut from that grown rectangle, not the strike zone proper; and membership still comes from the sphere overlap, whose corners are round, so a pitch clipping a corner diagonally reads as outside. That agrees with Savant's own `zone` on all 42,538 pitches in the local cache.
+
+Getting there turned up a real error: the half-plate constant had been rounded to `0.708` feet, five hundredths of an inch shy of the true 17/24. That was enough to put 4 pitches in the wrong zone and to disagree with Savant's `isInZone` on 2, which is why the mismatch count above is now exact rather than approximate.
 
 ## Pitch types
 

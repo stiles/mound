@@ -156,6 +156,8 @@ class PitchCollection:
         until: DateLike | None = None,
         is_strike: bool | None = None,
         in_zone: bool | None = None,
+        zone: int | list[int] | None = None,
+        ends_at_bat: bool | None = None,
         stand: str | None = None,
         batter: PersonLike | None = None,
         pitcher: PersonLike | None = None,
@@ -177,6 +179,17 @@ class PitchCollection:
         ``at_bat_number`` is only unique within a single game, so pair it
         with ``game`` to isolate one at-bat; add ``pitch_number`` on top of
         that to narrow all the way down to one specific pitch.
+
+        ``zone`` takes one Statcast zone number or a list of them: 1-9 inside
+        the strike zone, 11-14 outside it (there is no 10). ``zone=5`` is the
+        heart of the plate, ``zone=[11, 12, 13, 14]`` everything off it.
+
+        ``ends_at_bat=True`` keeps the pitch each at-bat ended on, one row per
+        plate appearance, which is where ``at_bat_result`` and ``description``
+        actually apply -- Savant repeats both on every pitch of the at-bat.
+        The flag is derived when the feed is parsed, so it survives narrowing:
+        filtering to changeups first doesn't promote an at-bat's last changeup
+        into its last pitch.
         """
         pitches = self._pitches
 
@@ -210,6 +223,13 @@ class PitchCollection:
 
         if in_zone is not None:
             pitches = [p for p in pitches if p.in_zone == in_zone]
+
+        if zone is not None:
+            wanted_zones = {zone} if isinstance(zone, int) else set(zone)
+            pitches = [p for p in pitches if p.zone in wanted_zones]
+
+        if ends_at_bat is not None:
+            pitches = [p for p in pitches if p.ends_at_bat == ends_at_bat]
 
         if stand is not None:
             wanted_stand = normalize_stand(stand) or stand.strip().upper()

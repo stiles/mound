@@ -78,7 +78,7 @@ export const features = [
   {
     title: "Charts that arrive finished",
     code: "mound zone --kind heatmap",
-    body: "A headline, dek and source render around the strike zone. Scatter, heatmap or KDE, optionally split into vs-LHB and vs-RHB panels.",
+    body: "A headline, dek and source render around the strike zone. Scatter, heatmap, KDE or Statcast's numbered zones, optionally split into vs-LHB and vs-RHB panels.",
   },
   {
     title: "Matchups from either side",

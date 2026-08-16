@@ -21,6 +21,9 @@ from mound.viz import (
     _default_subtitle,
     plot_zone,
 )
+from mound.zone import zone_number
+
+SZ_TOP, SZ_BOT = 3.4, 1.6
 
 
 def _pitch(plate_x, plate_z, batter_stand, pitch_type="four-seam fastball") -> Pitch:
@@ -42,8 +45,8 @@ def _pitch(plate_x, plate_z, batter_stand, pitch_type="four-seam fastball") -> P
         velocity=95.0,
         plate_x=plate_x,
         plate_z=plate_z,
-        sz_top=3.4,
-        sz_bot=1.6,
+        sz_top=SZ_TOP,
+        sz_bot=SZ_BOT,
         in_zone=True,
         balls=0,
         strikes=0,
@@ -54,6 +57,7 @@ def _pitch(plate_x, plate_z, batter_stand, pitch_type="four-seam fastball") -> P
         is_whiff=False,
         at_bat_result=None,
         description=None,
+        zone=zone_number(plate_x, plate_z, SZ_TOP, SZ_BOT),
     )
 
 
@@ -269,6 +273,93 @@ def test_color_by_stand_within_split_by_stand_skips_a_redundant_key(mixed_stand_
 def test_unknown_kind_raises(mixed_stand_collection):
     with pytest.raises(ValueError, match="Unknown plot kind"):
         plot_zone(mixed_stand_collection, kind="not_a_real_kind")
+
+
+def _zone_lines(ax) -> list:
+    """The grid lines drawn inside the strike zone, if any."""
+    return list(ax.lines)
+
+
+def test_grid_draws_the_four_interior_lines_of_the_zone(mixed_stand_collection):
+    ax = plot_zone(mixed_stand_collection, grid=True)
+
+    assert len(_zone_lines(ax)) == 4
+
+
+def test_no_grid_unless_asked_for(mixed_stand_collection):
+    ax = plot_zone(mixed_stand_collection)
+
+    assert _zone_lines(ax) == []
+
+
+def test_grid_reaches_the_edges_of_the_drawn_strike_zone(mixed_stand_collection):
+    ax = plot_zone(mixed_stand_collection, grid=True)
+
+    verticals = [line for line in _zone_lines(ax) if len(set(line.get_xdata())) == 1]
+    for line in verticals:
+        assert list(line.get_ydata()) == [SZ_BOT, SZ_TOP]
+
+
+def _labeled_counts(ax) -> dict[int, int]:
+    """Read a ``kind="zones"`` panel back as ``{zone number: count}``.
+
+    Each cell is labeled with its count first and its zone number second,
+    so the texts pair off in draw order.
+    """
+    counts, numbers = ax.texts[::2], ax.texts[1::2]
+    return {
+        int(number.get_text()): int(count.get_text())
+        for count, number in zip(counts, numbers, strict=True)
+    }
+
+
+@pytest.fixture
+def zoned_collection() -> PitchCollection:
+    # Zones 4, 6, 5, 12 and 13 respectively, against this batter's zone.
+    coords = [(-0.3, 2.5), (-0.3, 2.5), (0.4, 2.2), (0.0, 2.5), (1.5, 3.2), (-1.2, 1.0)]
+    return PitchCollection([_pitch(x, z, "R") for x, z in coords])
+
+
+def test_zones_labels_all_thirteen_cells(zoned_collection):
+    ax = plot_zone(zoned_collection, kind="zones")
+
+    assert sorted(_labeled_counts(ax)) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14]
+
+
+def test_zones_counts_each_pitch_into_the_zone_it_was_assigned(zoned_collection):
+    ax = plot_zone(zoned_collection, kind="zones")
+
+    counts = _labeled_counts(ax)
+    assert counts[4] == 2
+    assert counts[5] == 1
+    assert counts[6] == 1
+    assert counts[12] == 1
+    assert counts[13] == 1
+    assert counts[1] == 0
+
+
+def test_zones_draws_no_grid_lines_of_its_own(zoned_collection):
+    # The cells are patches; asking for the overlay too would double them.
+    ax = plot_zone(zoned_collection, kind="zones", grid=True)
+
+    assert _zone_lines(ax) == []
+
+
+def test_zones_with_split_by_counts_each_side_separately():
+    pitches = [_pitch(0.0, 2.5, "L")] + [_pitch(-0.3, 2.5, "R") for _ in range(3)]
+
+    axes = plot_zone(PitchCollection(pitches), kind="zones", split_by="stand")
+
+    assert _labeled_counts(axes[0])[5] == 1
+    assert _labeled_counts(axes[1])[4] == 3
+
+
+def test_zones_on_an_empty_collection_still_draws_the_diagram():
+    collection = PitchCollection([])
+
+    ax = plot_zone(collection, kind="zones")
+
+    assert set(_labeled_counts(ax).values()) == {0}
 
 
 def _roki() -> Player:

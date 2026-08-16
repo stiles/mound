@@ -2,7 +2,9 @@
 
 Kept to matplotlib alone for the default path, to minimize dependencies.
 ``kind="heatmap"`` bins pitches into a plain 2D histogram, a reasonable
-tradeoff for a small pitch sample; ``kind="kde"`` trades that simplicity for
+tradeoff for a small pitch sample; ``kind="zones"`` counts them into
+Statcast's numbered zones instead of arbitrary bins, so the chart speaks the
+numbering people already argue in; ``kind="kde"`` trades that simplicity for
 a smoother kernel density surface via the optional ``scipy`` dependency
 (``pip install "mound[viz]"``), better suited to larger samples.
 
@@ -22,11 +24,11 @@ from typing import TYPE_CHECKING
 import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import LinearSegmentedColormap, PowerNorm
+from matplotlib.colors import LinearSegmentedColormap, PowerNorm, to_rgb
 from matplotlib.patches import Polygon, Rectangle
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
-from mound.zone import SZ_LEFT_FEET, SZ_RIGHT_FEET
+from mound.zone import SZ_LEFT_FEET, SZ_RIGHT_FEET, zone_grid
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -279,6 +281,179 @@ def _draw_strike_zone(ax: Axes, sz_top: float, sz_bot: float) -> None:
     ax.add_patch(rect)
 
 
+# A drawable cell, as matplotlib's Rectangle takes it: (x, z, width, height).
+_Rect = tuple[float, float, float, float]
+
+
+def _draw_zone_grid(ax: Axes, sz_top: float, sz_bot: float) -> None:
+    """Draw the interior lines of Statcast's 3x3 grid inside the zone.
+
+    Light enough to read as chrome under the pitches rather than as data,
+    and clipped to the drawn strike zone: the grid's own outer edge sits a
+    ball radius outside it, which would look like a second, wrong zone box.
+    """
+    xs, zs = zone_grid(sz_top, sz_bot)
+    for x in xs[1:3]:
+        ax.plot([x, x], [sz_bot, sz_top], color=LINE, linewidth=0.7, zorder=2.5)
+    for z in zs[1:3]:
+        ax.plot([SZ_LEFT_FEET, SZ_RIGHT_FEET], [z, z], color=LINE, linewidth=0.7, zorder=2.5)
+
+
+def _zone_cells(sz_top: float, sz_bot: float) -> tuple[dict[int, _Rect], dict[int, _Rect]]:
+    """Rectangles to shade per zone number, inner cells and outer ones.
+
+    Each is keyed by zone number and valued ``(x, z, width, height)``.
+    Zones 1-9 are the grid itself. Zones 11-14 aren't rectangles at all in
+    the data -- they're quadrants running out to wherever a pitch landed --
+    so they're drawn as quarters of a box one cell deep around the grid, far
+    enough out to read as a border and close enough to keep the zone the
+    subject. Each overlaps the grid and is meant to be drawn under it, so
+    only the outer ring shows. A pitch counted in zone 11 may well have been
+    thrown further out than the cell labeling it.
+    """
+    xs, zs = zone_grid(sz_top, sz_bot)
+    cell_w, cell_h = (xs[3] - xs[0]) / 3, (zs[3] - zs[0]) / 3
+
+    inner = {}
+    for row in range(3):
+        for column in range(3):
+            inner[1 + row * 3 + column] = (xs[column], zs[2 - row], cell_w, cell_h)
+
+    left, right = xs[0] - cell_w, xs[3] + cell_w
+    bottom, top = zs[0] - cell_h, zs[3] + cell_h
+    mid_x, mid_z = (xs[0] + xs[3]) / 2, (zs[0] + zs[3]) / 2
+    outer = {
+        11: (left, mid_z, mid_x - left, top - mid_z),
+        12: (mid_x, mid_z, right - mid_x, top - mid_z),
+        13: (left, bottom, mid_x - left, mid_z - bottom),
+        14: (mid_x, bottom, right - mid_x, mid_z - bottom),
+    }
+    return inner, outer
+
+
+def _corner_of(number: int, rect: _Rect) -> tuple[float, float]:
+    """Where to label an outer zone: the corner of the ring it owns."""
+    x, z, width, height = rect
+    inset_x, inset_z = width / 6, height / 6
+    left = number in (11, 13)
+    lower = number in (13, 14)
+    return (
+        x + inset_x if left else x + width - inset_x,
+        z + inset_z if lower else z + height - inset_z,
+    )
+
+
+def _draw_zone_counts(ax: Axes, df, sz_top: float, sz_bot: float) -> None:
+    """Fill each Statcast zone by how many pitches landed in it.
+
+    Counts come from each pitch's own ``zone``, measured against the batter
+    it was thrown to, while the cells are drawn from the panel's average
+    zone -- the same averaging every strike zone in these plots already
+    does. So a pitch can be counted in a cell its own dot wouldn't sit in.
+
+    The heavy line around the nine cells stands in for the strike zone box
+    the other plot kinds draw, and sits a ball radius outside it, because
+    that wider edge is the one the numbering is cut on.
+
+    Only the nine are shaded. Zones 11-14 cover unbounded area, so they
+    collect more pitches than any one cell almost by definition -- putting
+    them on the same ramp would darken the ring, flatten the nine cells that
+    are the point of the chart, and imply a comparison that isn't there.
+    They carry their counts as numbers instead.
+    """
+    inner, outer = _zone_cells(sz_top, sz_bot)
+    counts = df["zone"].dropna().astype(int).value_counts().to_dict() if not df.empty else {}
+    busiest = max((counts.get(n, 0) for n in inner), default=0)
+
+    def cell(rect: _Rect, facecolor, zorder: float) -> None:
+        x, z, width, height = rect
+        ax.add_patch(
+            Rectangle(
+                (x, z),
+                width,
+                height,
+                facecolor=facecolor,
+                edgecolor=LINE,
+                linewidth=0.7,
+                zorder=zorder,
+            )
+        )
+
+    for number, rect in outer.items():
+        cell(rect, BACKGROUND, zorder=1)
+        x, z = _corner_of(number, rect)
+        # Muted, so the ring reads as annotation and the nine cells stay the
+        # subject of the chart.
+        _label_cell(ax, x, z, number, int(counts.get(number, 0)), MUTED)
+
+    for number, rect in inner.items():
+        count = int(counts.get(number, 0))
+        # Shade from the same ramp the density surfaces use, but start above
+        # its palest stop so an empty cell reads as empty rather than as one
+        # pitch. Numbers stay legible either way, so an empty grid is still
+        # a labeled diagram of the zone.
+        share = count / busiest if busiest else 0.0
+        facecolor = DENSITY_CMAP(0.15 + 0.85 * share) if count else BACKGROUND
+        cell(rect, facecolor, zorder=1.5)
+        x, z, width, height = rect
+        ink = _readable_on(facecolor) if count else FAINT
+        _label_cell(ax, x + width / 2, z + height / 2, number, count, ink)
+
+    xs, zs = zone_grid(sz_top, sz_bot)
+    ax.add_patch(
+        Rectangle(
+            (xs[0], zs[0]),
+            xs[3] - xs[0],
+            zs[3] - zs[0],
+            fill=False,
+            edgecolor=INK,
+            linewidth=1.3,
+            zorder=3,
+        )
+    )
+
+
+def _readable_on(facecolor) -> str:
+    """Light or dark label ink, whichever the fill can carry.
+
+    The density ramp runs from near-white yellow to near-black green, so a
+    fixed choice loses one end or the other. Weighted for how bright each
+    channel looks (green far more than blue), and switched at the midpoint,
+    which for this ramp falls inside the green where either color would do.
+    """
+    red, green, blue = to_rgb(facecolor)
+    brightness = 0.299 * red + 0.587 * green + 0.114 * blue
+    return INK if brightness > 0.5 else BACKGROUND
+
+
+def _label_cell(ax: Axes, x: float, z: float, number: int, count: int, ink: str) -> None:
+    ax.text(
+        x,
+        z,
+        str(count),
+        ha="center",
+        va="center",
+        fontsize=12 if number < 10 else 10.5,
+        fontweight="semibold" if count else "normal",
+        color=ink,
+        zorder=2,
+    )
+    # The zone number, small and under the count, so the chart teaches the
+    # numbering that --zone and filter(zone=...) take without competing
+    # with the counts for the eye.
+    ax.text(
+        x,
+        z - 0.135,
+        str(number),
+        ha="center",
+        va="center",
+        fontsize=7.5,
+        color=ink,
+        alpha=0.6,
+        zorder=2,
+    )
+
+
 def _style_axes(ax: Axes) -> None:
     for spine in ax.spines.values():
         spine.set_visible(False)
@@ -376,7 +551,12 @@ def _draw_kde(ax: Axes, df, bw_method: float | str | None) -> None:
 
 
 def _draw_panel(
-    ax: Axes, df, kind: str, color_column: str | None, bw_method: float | str | None = None
+    ax: Axes,
+    df,
+    kind: str,
+    color_column: str | None,
+    bw_method: float | str | None = None,
+    grid: bool = False,
 ) -> list:
     """Draw pitch markers plus home plate and strike zone onto ``ax``.
 
@@ -408,6 +588,8 @@ def _draw_panel(
                 aspect="auto",
                 zorder=1,
             )
+    elif kind == "zones":
+        _draw_zone_counts(ax, df, sz_top, sz_bot)
     elif kind == "kde":
         _draw_kde(ax, df, bw_method)
     elif kind == "scatter":
@@ -437,10 +619,17 @@ def _draw_panel(
                 zorder=2,
             )
     else:
-        raise ValueError(f"Unknown plot kind: {kind!r} (expected 'scatter', 'heatmap' or 'kde')")
+        raise ValueError(
+            f"Unknown plot kind: {kind!r} (expected 'scatter', 'heatmap', 'zones' or 'kde')"
+        )
 
     _draw_home_plate(ax)
-    _draw_strike_zone(ax, sz_top, sz_bot)
+    # `zones` draws its own cells and its own outer edge, so the grid
+    # overlay would double the lines and the zone box would contradict them.
+    if kind != "zones":
+        if grid:
+            _draw_zone_grid(ax, sz_top, sz_bot)
+        _draw_strike_zone(ax, sz_top, sz_bot)
     return group_values
 
 
@@ -456,6 +645,7 @@ def plot_zone(
     kind: str = "scatter",
     color_by: str | None = "pitch_type",
     split_by: str | None = None,
+    grid: bool = False,
     bw_method: float | str | None = None,
     ax: Axes | None = None,
     title: str | None = None,
@@ -468,9 +658,11 @@ def plot_zone(
     Args:
         collection: pitches to plot.
         kind: ``"scatter"`` for individual pitch points, ``"heatmap"`` for
-            a 2D-histogram density plot, or ``"kde"`` for a smoother kernel
-            density estimate (requires the optional ``scipy`` dependency;
-            install with ``pip install "mound[viz]"``).
+            a 2D-histogram density plot, ``"zones"`` to count pitches into
+            Statcast's numbered zones instead of arbitrary bins, or
+            ``"kde"`` for a smoother kernel density estimate (requires the
+            optional ``scipy`` dependency; install with
+            ``pip install "mound[viz]"``).
         color_by: column to color/group scatter points by, either
             ``"pitch_type"`` (the default) or ``"stand"``/``"batter_stand"``
             for a lefties/righties breakdown within one panel, as a lighter
@@ -484,6 +676,10 @@ def plot_zone(
             breakdown. One panel is drawn per non-null value present, each
             with its own strike zone and pitch count. Cannot be combined
             with an existing ``ax``.
+        grid: draw Statcast's 3x3 grid inside the strike zone, so a scatter
+            or heatmap can be read against the same zones ``pitch.zone``
+            and ``filter(zone=...)`` use. Redundant with (and ignored by)
+            ``kind="zones"``, which draws the cells itself.
         bw_method: bandwidth passed through to ``scipy.stats.gaussian_kde``
             when ``kind="kde"``; ignored otherwise. Defaults to a fixed
             factor (``KDE_DEFAULT_BW`` in ``mound/viz.py``) tuned for a
@@ -519,7 +715,17 @@ def plot_zone(
         if ax is not None:
             raise ValueError("split_by cannot be combined with an existing ax")
         return _plot_zone_faceted(
-            collection, df, kind, color_column, split_by, bw_method, title, subtitle, source, out
+            collection,
+            df,
+            kind,
+            color_column,
+            split_by,
+            grid,
+            bw_method,
+            title,
+            subtitle,
+            source,
+            out,
         )
 
     owns_figure = ax is None
@@ -531,7 +737,7 @@ def plot_zone(
         else:
             fig = ax.figure
 
-        group_values = _draw_panel(ax, df, kind, color_column, bw_method)
+        group_values = _draw_panel(ax, df, kind, color_column, bw_method, grid)
         if len(group_values) > 1:
             _draw_legend_key(ax, color_column, group_values)
         _finish_panel(ax)
@@ -556,6 +762,7 @@ def _plot_zone_faceted(
     kind: str,
     color_column: str | None,
     split_by: str,
+    grid: bool,
     bw_method: float | str | None,
     title: str | None,
     subtitle: str | None,
@@ -574,7 +781,7 @@ def _plot_zone_faceted(
 
         for i, (value, panel_ax) in enumerate(zip(values, axes, strict=True)):
             subset = df[df[column] == value]
-            group_values = _draw_panel(panel_ax, subset, kind, color_column, bw_method)
+            group_values = _draw_panel(panel_ax, subset, kind, color_column, bw_method, grid)
             if i == 0 and len(group_values) > 1:
                 _draw_legend_key(panel_ax, color_column, group_values)
             _finish_panel(panel_ax)

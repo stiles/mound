@@ -61,7 +61,7 @@ mound pitches "Edwin Díaz" --last 4 --cache --export diaz_last4.csv
 ```
 
 ```
-77 pitch(es) total.
+Showing 20 of 77 pitch(es).
 Exported 77 pitch(es) to diaz_last4.csv
 ```
 
@@ -76,15 +76,45 @@ mound pitches "Edwin Díaz" --game 823915 --pitch fastball --cache
 ```
 
 ```
- game_date  inning         pitch_type  velocity      pitch_call at_bat_result
-2026-08-13       9 four-seam fastball      97.2   called_strike     Strikeout
-2026-08-13       9 four-seam fastball      96.2            ball     Strikeout
-2026-08-13       9 four-seam fastball      95.0            ball     Strikeout
-2026-08-13       9 four-seam fastball      96.2   called_strike        Single
-2026-08-13       9 four-seam fastball      97.6            ball        Single
-2026-08-13       9 four-seam fastball      95.9   hit_into_play        Single
-2026-08-13       9 four-seam fastball      96.7 swinging_strike        Single
+Edwin Díaz · 2026-08-13 · game 823915 · four-seam fastball
+ inn  ab count            batter  velo zone            call    result
+   9  66   0-0 William Contreras  97.2    2   called_strike
+   9  66   0-1 William Contreras  96.2   11            ball
+   9  66   1-2 William Contreras  95.0   11            ball
+   9  67   0-0        Joey Ortiz  96.2    9   called_strike
+   9  67   0-1        Joey Ortiz  97.6   14            ball
+   9  67   1-1        Joey Ortiz  95.9    4   hit_into_play    Single
+   9  68   0-0    David Hamilton  96.7    5 swinging_strike
+   9  68   0-1    David Hamilton  95.8   11            ball
+   9  68   2-2    David Hamilton  96.1    5   hit_into_play    Single
+   9  69   1-0   Jackson Chourio  97.6    3   called_strike
+   9  69   2-1   Jackson Chourio  97.3   14            ball
+   9  69   3-1   Jackson Chourio  95.8    1 swinging_strike
+   9  70   0-0  Garrett Mitchell  98.2    6   called_strike
+   9  71   0-0      Gary Sánchez  95.4    6   called_strike
+   9  71   0-2      Gary Sánchez  96.8    3   called_strike Strikeout
 ```
+
+The date, the game and the pitch type are the same on every row, so they're stated once above the table instead of down three columns; that's what leaves room for the batter and the zone. `zone` is Statcast's numbering as it appears on Savant — 1-9 across the strike zone, 11-14 for the quadrants outside it — so 2, 3 and 11 are all up, and the two singles came off zone 4 and zone 5. The counts skip around — 0-1 to 1-2 in at-bat 66 — because `--pitch fastball` is hiding the sliders thrown in between.
+
+An outcome prints only on the pitch that produced it. Savant stamps the at-bat's result on all of its pitches, which would show this inning as a dozen singles instead of four. `--ends-at-bat` keeps just the deciding pitches, which is the whole blown save in six rows:
+
+```bash
+mound pitches "Edwin Díaz" --game 823915 --ends-at-bat --cache
+```
+
+```
+Edwin Díaz · 2026-08-13 · game 823915
+ inn  ab count            batter pitch  velo zone          call    result
+   9  66   2-2 William Contreras    SL  88.9    7 called_strike Strikeout
+   9  67   1-1        Joey Ortiz    FF  95.9    4 hit_into_play    Single
+   9  68   2-2    David Hamilton    FF  96.1    5 hit_into_play    Single
+   9  69   3-2   Jackson Chourio    SL  91.1   14 hit_into_play    Single
+   9  70   0-1  Garrett Mitchell    SL  90.0    9 hit_into_play    Single
+   9  71   0-2      Gary Sánchez    FF  96.8    3 called_strike Strikeout
+```
+
+Two strikeouts with four singles in between, split evenly between the fastball and the slider — so this wasn't one pitch getting hit, which is where the rest of this walkthrough starts.
 
 ## 4. Pitch mix, by game
 
@@ -222,6 +252,16 @@ mound zone "Edwin Díaz" --since 2026-03-01 --pitch fastball --kind heatmap --ca
 ```
 
 ![Edwin Díaz's four-seam fastball locations, 2026 season](../images/diaz_ff_season_heatmap.png)
+
+Or put numbers on the same picture with `--kind zones`, which counts the season into the zones the table above filtered by:
+
+```bash
+mound zone "Edwin Díaz" --since 2026-03-01 --pitch fastball --kind zones --cache --out diaz_ff_season_zones.png
+```
+
+![Edwin Díaz's four-seam fastball counted into Statcast's zones, 2026 season](../images/diaz_ff_season_zones.png)
+
+One fastball all season finished in zone 8, below the belt over the middle of the plate. The busiest cell is zone 5, dead center, at 17 — and one of the two fastballs Milwaukee singled on that night came from it. The upper quadrants outside the zone hold 60 between them, which is the pitch doing its intended job.
 
 ### And does he actually pay for it?
 

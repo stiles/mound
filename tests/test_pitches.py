@@ -150,6 +150,56 @@ def test_pitches_at_bat_and_pitch_number_shortcuts_filter_at_retrieval(mocked_re
     assert collection.pitches[0].pitch_id == "1001-1-2"
 
 
+def test_collection_filter_by_zone(mocked_responses):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    collection = Pitcher(808963).pitches(game=1001)
+    in_the_zone = collection.filter(zone=[1, 2, 3, 4, 5, 6, 7, 8, 9])
+    off_the_plate = collection.filter(zone=[11, 12, 13, 14])
+
+    assert len(in_the_zone) + len(off_the_plate) == len(collection)
+    assert all(p.in_zone for p in in_the_zone)
+    assert not any(p.in_zone for p in off_the_plate)
+
+
+def test_collection_filter_by_a_single_zone(mocked_responses):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    collection = Pitcher(808963).pitches(game=1001)
+    heart = collection.filter(zone=5)
+
+    assert len(heart) == 1
+    assert heart.pitches[0].pitch_id == "1001-1-1"  # 0-0 fastball, middle-middle
+
+
+def test_collection_filter_by_ends_at_bat_keeps_one_pitch_per_at_bat(mocked_responses):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    collection = Pitcher(808963).pitches(game=1001)
+    endings = collection.filter(ends_at_bat=True)
+
+    assert len(endings) == 2  # game 1001 is two at-bats, five pitches
+    assert [p.pitch_id for p in endings] == ["1001-1-3", "1001-2-2"]
+    assert [p.at_bat_result for p in endings] == ["Strikeout", "Walk"]
+
+
+def test_ends_at_bat_is_not_recomputed_after_another_filter(mocked_responses):
+    # At-bat 1 ends on a splitter, so its only fastball ends nothing. A flag
+    # derived from whatever is left after filtering would call that fastball
+    # the last one of the at-bat, which is the whole trap being avoided here.
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    fastballs = Pitcher(808963).pitches(game=1001, pitch_type="fastball")
+    endings = fastballs.filter(ends_at_bat=True)
+
+    assert [p.pitch_id for p in fastballs] == ["1001-1-1", "1001-2-2"]
+    assert [p.pitch_id for p in endings] == ["1001-2-2"]  # the walk, not the 0-0 fastball
+
+
 def test_collection_filter_by_batter_id(mocked_responses):
     _register_roki_with_all_games(mocked_responses)
 

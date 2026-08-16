@@ -95,6 +95,70 @@ def test_game_pitches_for_pitcher_sorted_by_at_bat_and_pitch_number(mocked_respo
     assert order == sorted(order)
 
 
+def test_game_pitches_marks_the_pitch_each_at_bat_ended_on(mocked_responses):
+    # Game 1001 is two at-bats: a three-pitch strikeout, then a two-pitch
+    # walk. Savant repeats the outcome on every pitch of an at-bat, so the
+    # flag is what says which row it belongs to.
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    pitches = game_pitches_for_pitcher(1001, 808963)
+
+    assert [p.ends_at_bat for p in pitches] == [False, False, True, False, True]
+    ending = [p for p in pitches if p.ends_at_bat]
+    assert [(p.at_bat_number, p.pitch_number) for p in ending] == [(1, 3), (2, 2)]
+    assert [p.at_bat_result for p in ending] == ["Strikeout", "Walk"]
+
+
+def test_ends_at_bat_marks_nothing_in_an_at_bat_with_no_outcome(mocked_responses):
+    # Game 1004's at-bat 5 has two pitches and no result, the shape of a
+    # plate appearance still being pitched. Its latest pitch isn't its last.
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    pitches = game_pitches_for_pitcher(1004, 700001)
+
+    in_progress = [p for p in pitches if p.at_bat_number == 5]
+    assert len(in_progress) == 2
+    assert all(p.ends_at_bat is False for p in in_progress)
+    assert all(p.at_bat_result is None for p in in_progress)
+    # The finished at-bat in the same list is still marked.
+    assert [p.ends_at_bat for p in pitches if p.at_bat_number == 6] == [True]
+
+
+def test_ends_at_bat_reads_the_whole_feed_not_one_pitcher_list(mocked_responses):
+    # A pitcher pulled mid-at-bat: his last pitch isn't the at-bat's, and
+    # looking only at his own list is exactly how you'd miss that.
+    def raw(pitcher: int, pitch_number: int, call: str) -> dict:
+        return {
+            "type": "pitch",
+            "ab_number": 12,
+            "pitch_number": pitch_number,
+            "pitcher": pitcher,
+            "pitch_type": "FF",
+            "pitch_call": call,
+            "result": "Single",
+        }
+
+    register_gf_payload(
+        mocked_responses,
+        1005,
+        {
+            "game_status_code": "F",
+            "game_date": "2025-09-01",
+            "home_pitchers": {
+                "111": [raw(111, 1, "ball"), raw(111, 2, "foul")],
+                "222": [raw(222, 3, "hit_into_play")],
+            },
+            "away_pitchers": {},
+        },
+    )
+
+    pulled = game_pitches_for_pitcher(1005, 111)
+    finished = game_pitches_for_pitcher(1005, 222)
+
+    assert [p.ends_at_bat for p in pulled] == [False, False]
+    assert [p.ends_at_bat for p in finished] == [True]
+
+
 def test_game_pitches_for_unknown_pitcher_returns_empty(mocked_responses):
     register_gf(mocked_responses, 1001, "gf_game_1001.json")
 

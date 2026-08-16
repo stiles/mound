@@ -17,6 +17,8 @@ from mound.http import get_json
 from mound.models import Pitch, pitch_from_savant
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from mound.cache import Cache
 
 
@@ -58,6 +60,13 @@ def fetch_game_feed(game_pk: int, cache: Cache | None = None) -> dict:
     return data
 
 
+def _all_raw_pitches(feed: dict) -> Iterator[dict]:
+    """Every pitch entry in the feed, from both teams' pitchers."""
+    for side in ("home_pitchers", "away_pitchers"):
+        for pitcher_pitches in (feed.get(side) or {}).values():
+            yield from pitcher_pitches
+
+
 def _raw_pitches_for_pitcher(feed: dict, pitcher_id: int) -> list[dict]:
     key = str(pitcher_id)
     for side in ("home_pitchers", "away_pitchers"):
@@ -68,21 +77,53 @@ def _raw_pitches_for_pitcher(feed: dict, pitcher_id: int) -> list[dict]:
 
 
 def _raw_pitches_for_batter(feed: dict, batter_id: int) -> list[dict]:
-    raw_pitches: list[dict] = []
-    for side in ("home_pitchers", "away_pitchers"):
-        for pitcher_pitches in (feed.get(side) or {}).values():
-            raw_pitches.extend(p for p in pitcher_pitches if p.get("batter") == batter_id)
-    return raw_pitches
+    return [p for p in _all_raw_pitches(feed) if p.get("batter") == batter_id]
 
 
-def _normalize_pitches(raw_pitches: list[dict], game_date: str | None) -> list[Pitch]:
+def _final_pitch_numbers(feed: dict) -> dict[int, int]:
+    """The pitch number each at-bat in this game ended on, keyed by at-bat number.
+
+    Read from the whole feed rather than one pitcher's list, for two reasons:
+    at-bat numbers run across both teams, and a pitcher pulled mid-at-bat
+    would otherwise look like he threw its last pitch.
+
+    Only at-bats Savant has posted a result for are counted. Savant repeats
+    that result on every pitch of the at-bat, so its presence says the plate
+    appearance is over, not which pitch ended it -- and its absence keeps a
+    live at-bat's latest pitch from being called its last, since a pitcher
+    mid-count hasn't ended anything yet. The trade is that an at-bat ending
+    on a throw rather than a pitch (a runner caught stealing for the third
+    out, about 1 at-bat in 500) still marks its last pitch, which is where
+    the record ends even though that pitch didn't decide it.
+    """
+    final: dict[int, int] = {}
+    for raw in _all_raw_pitches(feed):
+        if raw.get("type") != "pitch" or not raw.get("result"):
+            continue
+        at_bat_number, pitch_number = raw.get("ab_number"), raw.get("pitch_number")
+        if at_bat_number is None or pitch_number is None:
+            continue
+        if pitch_number > final.get(at_bat_number, 0):
+            final[at_bat_number] = pitch_number
+    return final
+
+
+def _normalize_pitches(
+    raw_pitches: list[dict], game_date: str | None, final_pitch_numbers: dict[int, int]
+) -> list[Pitch]:
     pitches = []
     for raw in raw_pitches:
         if raw.get("type") != "pitch":
             continue
         enriched = dict(raw)
         enriched.setdefault("game_date", game_date)
-        pitches.append(pitch_from_savant(enriched))
+        at_bat_number, pitch_number = raw.get("ab_number"), raw.get("pitch_number")
+        ends_at_bat = (
+            None
+            if at_bat_number is None or pitch_number is None
+            else final_pitch_numbers.get(at_bat_number) == pitch_number
+        )
+        pitches.append(pitch_from_savant(enriched, ends_at_bat=ends_at_bat))
 
     pitches.sort(key=lambda p: (p.at_bat_number or 0, p.pitch_number or 0))
     return pitches
@@ -93,7 +134,11 @@ def game_pitches_for_pitcher(
 ) -> list[Pitch]:
     """Fetch and normalize every pitch a given pitcher threw in one game."""
     feed = fetch_game_feed(game_pk, cache=cache)
-    return _normalize_pitches(_raw_pitches_for_pitcher(feed, pitcher_id), feed.get("game_date"))
+    return _normalize_pitches(
+        _raw_pitches_for_pitcher(feed, pitcher_id),
+        feed.get("game_date"),
+        _final_pitch_numbers(feed),
+    )
 
 
 def game_pitches_for_batter(
@@ -105,4 +150,8 @@ def game_pitches_for_batter(
     them, so a hitter's night reads start to finish across pitching changes.
     """
     feed = fetch_game_feed(game_pk, cache=cache)
-    return _normalize_pitches(_raw_pitches_for_batter(feed, batter_id), feed.get("game_date"))
+    return _normalize_pitches(
+        _raw_pitches_for_batter(feed, batter_id),
+        feed.get("game_date"),
+        _final_pitch_numbers(feed),
+    )

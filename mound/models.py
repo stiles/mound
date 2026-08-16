@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING
 
-from mound.zone import is_in_zone
+from mound.zone import is_in_zone, zone_number
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -165,6 +165,22 @@ class Pitch:
     at_bat_result: str | None
     description: str | None
 
+    # Savant stamps `at_bat_result` and `description` on every pitch of an
+    # at-bat, so neither field says which pitch produced them: a five-pitch
+    # strikeout reads as five strikeouts. This marks the at-bat's last pitch,
+    # the row those two belong to. It's derived from the game feed rather than
+    # read off a pitch (Savant has no such field), so see
+    # `mound.savant._final_pitch_numbers` for the edges: an at-bat ended by a
+    # throw instead of a pitch still marks its last pitch, and an at-bat
+    # still being played marks none.
+    ends_at_bat: bool | None = None
+
+    # Statcast's numbered zones: 1-9 inside the strike zone, 11-14 for the
+    # quadrants outside it, no 10. Derived from the same geometry as
+    # `in_zone` rather than read from the feed, so the two can't disagree --
+    # see `mound.zone.zone_number`.
+    zone: int | None = None
+
     # Movement/release fields. Optional (default None) since Savant's own
     # tracking coverage varies by season/park, unlike core fields like
     # plate_x/plate_z; a None here means "not tracked for this pitch", not a
@@ -218,8 +234,13 @@ WHIFF_CALLS = {
 }
 
 
-def pitch_from_savant(raw: dict) -> Pitch:
-    """Build a normalized :class:`Pitch` from one entry of a Savant ``/gf`` pitcher list."""
+def pitch_from_savant(raw: dict, *, ends_at_bat: bool | None = None) -> Pitch:
+    """Build a normalized :class:`Pitch` from one entry of a Savant ``/gf`` pitcher list.
+
+    ``ends_at_bat`` is passed in rather than read from ``raw`` because it can
+    only be known by comparing a pitch against the rest of its at-bat, which
+    a single entry can't answer.
+    """
     pitch_type_code = raw.get("pitch_type")
     plate_x = raw.get("plate_x", raw.get("px"))
     plate_z = raw.get("plate_z", raw.get("pz"))
@@ -259,6 +280,8 @@ def pitch_from_savant(raw: dict) -> Pitch:
         is_whiff=(pitch_call in WHIFF_CALLS) if pitch_call is not None else None,
         at_bat_result=raw.get("result"),
         description=raw.get("des"),
+        ends_at_bat=ends_at_bat,
+        zone=zone_number(plate_x, plate_z, sz_top, sz_bot),
         spin_rate=raw.get("spin_rate"),
         release_extension=raw.get("extension"),
         release_pos_x=raw.get("x0"),

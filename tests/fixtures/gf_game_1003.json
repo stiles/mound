@@ -32,8 +32,8 @@
         "plate_z": 2.5,
         "px": -0.1,
         "pz": 2.5,
-        "result": null,
-        "des": null,
+        "result": "Strikeout",
+        "des": "Test Batter 1 strikes out swinging.",
         "game_pk": "1003"
       },
       {
@@ -65,8 +65,8 @@
         "plate_z": 2.6,
         "px": -0.2,
         "pz": 2.6,
-        "result": null,
-        "des": null,
+        "result": "Strikeout",
+        "des": "Test Batter 1 strikes out swinging.",
         "game_pk": "1003"
       },
       {
@@ -131,8 +131,8 @@
         "plate_z": 1.7,
         "px": -0.65,
         "pz": 1.7,
-        "result": null,
-        "des": null,
+        "result": "Walk",
+        "des": "Test Batter 2 walks.",
         "game_pk": "1003"
       },
       {
@@ -164,8 +164,8 @@
         "plate_z": 2.15,
         "px": 0.85,
         "pz": 2.15,
-        "result": null,
-        "des": null,
+        "result": "Walk",
+        "des": "Test Batter 2 walks.",
         "game_pk": "1003"
       },
       {

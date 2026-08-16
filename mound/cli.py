@@ -2,6 +2,7 @@
 
     mound search "Roki Sasaki"
     mound pitches "Roki Sasaki" --last 4 --pitch splitter
+    mound pitches "Roki Sasaki" --last 1 --ends-at-bat
     mound mix "Roki Sasaki" --last 4
     mound results "Roki Sasaki" --last 4 --pitch splitter
     mound arsenal "Roki Sasaki" --game 825051
@@ -9,6 +10,7 @@
     mound zone "Roki Sasaki" --pitch splitter --last 4 --out zone.png
     mound zone "Roki Sasaki" --last 8 --split-by stand --out zone.png
     mound zone "Roki Sasaki" --last 8 --color-by stand --out zone.png
+    mound zone "Roki Sasaki" --last 8 --kind zones --out zone.png
     mound video "Roki Sasaki" --pitch splitter --last 4 --out-dir clips
     mound video "Roki Sasaki" --pitch splitter --last 1 --limit 1
     mound video "Roki Sasaki" --game 717404 --at-bat 34 --pitch-number 3
@@ -26,6 +28,7 @@ import typer
 from mound import __version__
 from mound.pitches import PitchCollection, Pitcher
 from mound.players import AmbiguousPlayerError, PlayerNotFoundError
+from mound.zone import ZONE_NUMBERS
 
 app = typer.Typer(
     name="mound",
@@ -102,6 +105,110 @@ CacheDirOption = Annotated[
 ]
 
 
+def _count(balls, strikes) -> str:
+    if pd.isna(balls) or pd.isna(strikes):
+        return ""
+    return f"{int(balls)}-{int(strikes)}"
+
+
+def _parse_zones(raw: str | None) -> list[int] | None:
+    """Read ``--zone 5`` or ``--zone 1,2,3`` into zone numbers."""
+    if not raw:
+        return None
+    zones = []
+    for piece in raw.replace(" ", "").split(","):
+        if not piece:
+            continue
+        if not piece.isdigit() or int(piece) not in ZONE_NUMBERS:
+            _fail(
+                f"Unknown zone: {piece!r}. Statcast zones are 1-9 inside the "
+                "strike zone and 11-14 outside it (there is no 10)."
+            )
+        zones.append(int(piece))
+    return zones or None
+
+
+def _values(df: pd.DataFrame, column: str) -> list:
+    return sorted({value for value in df[column] if value is not None and not pd.isna(value)})
+
+
+def _pitch_table(collection: PitchCollection, limit: int | None) -> str:
+    """Render pitch rows as a table that reads one at-bat at a time.
+
+    The at-bat number and count are here because the inning alone can't tell
+    three at-bats in the same inning apart, which is what makes a repeated
+    result confusing to read.
+
+    Any field that never varies across the query is stated once in a headline
+    rather than repeated down a column -- the date of a single outing, the
+    hitter in a matchup, the pitch type behind `--pitch splitter`. That buys
+    the width for the batter and `in_zone`, and it's why pitch types appear
+    as Statcast codes in the rows but by name in the headline. `--export` is
+    where the full names and the other 25 fields live.
+
+    What's constant is read from the whole collection, not the rows being
+    printed, so a `--limit` that happens to cut off inside one at-bat can't
+    promote a column that actually varies.
+    """
+    full = collection.to_frame()
+    dates, batters, pitch_types, zones = (
+        _values(full, "game_date"),
+        _values(full, "batter_name"),
+        _values(full, "pitch_type"),
+        _values(full, "zone"),
+    )
+    games = collection.games
+
+    headline = [collection.pitcher.full_name] if collection.pitcher else []
+    if len(batters) == 1:
+        headline.append(f"to {batters[0]}")
+    headline.append(dates[0] if len(dates) == 1 else f"{dates[0]} to {dates[-1]}")
+    headline.append(f"game {games[0]}" if len(games) == 1 else f"{len(games)} games")
+    if len(pitch_types) == 1:
+        headline.append(pitch_types[0])
+    if len(zones) == 1:
+        headline.append(f"zone {int(zones[0])}")
+
+    df = full.head(limit) if limit else full
+    ended = df["ends_at_bat"].fillna(False).astype(bool)
+
+    columns: dict[str, object] = {}
+    # Several dates have to stay in the rows: they're what tells one
+    # appearance from the next, and they carry the at-bat numbers, which
+    # restart every game.
+    if len(dates) > 1:
+        columns["date"] = df["game_date"]
+    columns |= {
+        "inn": df["inning"],
+        "ab": df["at_bat_number"],
+        "count": [
+            _count(balls, strikes)
+            for balls, strikes in zip(df["balls"], df["strikes"], strict=True)
+        ],
+    }
+    if len(batters) != 1:
+        columns["batter"] = df["batter_name"]
+    if len(pitch_types) != 1:
+        columns["pitch"] = df["pitch_type_code"]
+    columns["velo"] = df["velocity"]
+    # Statcast's zone number says both where the pitch was and whether it was
+    # a strike by location -- 1-9 in, 11-14 out -- in two characters, which
+    # is why it's here instead of `in_zone`. A missing coordinate leaves it
+    # blank rather than showing an integer as 5.0.
+    if len(zones) != 1:
+        columns["zone"] = ["" if pd.isna(z) else str(int(z)) for z in df["zone"]]
+    columns |= {
+        "call": df["pitch_call"],
+        # Savant stamps an at-bat's outcome on every pitch of the at-bat.
+        # Printing it only on the pitch that ended the at-bat keeps one
+        # strikeout spread over five rows from reading as five strikeouts.
+        "result": df["at_bat_result"].where(ended, "").fillna(""),
+    }
+
+    table = pd.DataFrame(columns).to_string(index=False)
+    return f"{' · '.join(headline)}\n{table}"
+
+
 def _get_pitches(
     name: str,
     *,
@@ -170,6 +277,16 @@ def pitches(
     batter: BatterOption = None,
     at_bat: AtBatOption = None,
     pitch_number: PitchNumberOption = None,
+    zone: str | None = typer.Option(
+        None,
+        "--zone",
+        help="Statcast zone numbers: 1-9 in the strike zone, 11-14 outside, e.g. '5' or '11,12'",
+    ),
+    ends_at_bat: bool = typer.Option(
+        False,
+        "--ends-at-bat",
+        help="Only the pitch each at-bat ended on, one row per plate appearance",
+    ),
     export_path: str | None = typer.Option(None, "--export", help="Path to export results to"),
     export_format: str | None = typer.Option(
         None, "--format", help="Export format (csv/json/parquet); inferred from --export if omitted"
@@ -194,23 +311,21 @@ def pitches(
         cache_dir=cache_dir,
     )
 
+    zones = _parse_zones(zone)
+    if zones:
+        collection = collection.filter(zone=zones)
+    if ends_at_bat:
+        collection = collection.filter(ends_at_bat=True)
+
     if collection.empty:
         typer.echo("No pitches found for the given filters.")
     else:
-        df = collection.to_frame()
-        display_cols = [
-            "game_date",
-            "inning",
-            "pitch_type",
-            "velocity",
-            "pitch_call",
-            "at_bat_result",
-        ]
-        display_df = df[display_cols]
-        if limit:
-            display_df = display_df.head(limit)
-        typer.echo(display_df.to_string(index=False))
-        typer.echo(f"\n{len(collection)} pitch(es) total.")
+        typer.echo(_pitch_table(collection, limit))
+        shown = min(limit, len(collection)) if limit else len(collection)
+        if shown < len(collection):
+            typer.echo(f"\nShowing {shown} of {len(collection)} pitch(es).")
+        else:
+            typer.echo(f"\n{len(collection)} pitch(es) total.")
 
     if export_path:
         try:
@@ -374,7 +489,9 @@ def zone(
     at_bat: AtBatOption = None,
     pitch_number: PitchNumberOption = None,
     kind: str = typer.Option(
-        "scatter", "--kind", help="'scatter', 'heatmap', or 'kde' (requires mound[viz])"
+        "scatter",
+        "--kind",
+        help="'scatter', 'heatmap', 'zones', or 'kde' (requires mound[viz])",
     ),
     color_by: str = typer.Option(
         "pitch_type",
@@ -383,6 +500,9 @@ def zone(
     ),
     split_by: str | None = typer.Option(
         None, "--split-by", help="Facet into side-by-side panels, e.g. 'stand'"
+    ),
+    grid: bool = typer.Option(
+        False, "--grid", help="Draw the 3x3 zone grid inside the strike zone"
     ),
     bw_method: float | None = typer.Option(
         None, "--bw-method", help="Bandwidth for --kind kde (default: scipy's own heuristic)"
@@ -415,6 +535,7 @@ def zone(
             kind=kind,
             color_by=None if color_by.lower() == "none" else color_by,
             split_by=split_by,
+            grid=grid,
             bw_method=bw_method,
             out=out,
         )

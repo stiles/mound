@@ -11,6 +11,7 @@ Sensible next steps beyond the initial prototype, roughly grouped by theme. None
 ## More visualization
 
 - **Color zone plots by outcome.** `color_by` now covers pitch type and batter handedness, but not what happened: a whiff, a called strike, a ball, a ball in play. Needs a palette that reads as a sequence (harmless to damaging) rather than as unordered categories, and a decision about whether the four Savant `pitch_call` families are the right grouping or too granular for one panel.
+- **Zone charts by rate, not count.** `kind="zones"` fills each cell with how many pitches landed there; the more interesting question is usually what happened when they did — whiff rate, chase rate, slugging by zone. Needs a rule for cells with too few pitches to rate honestly, and probably a diverging ramp against the pitcher's own average rather than the sequential one counts use.
 - Movement plots (horizontal/vertical break) alongside location plots.
 - Release-point consistency plots across a start or season.
 - Overlaying multiple periods (e.g. pre/post All-Star break) on a single zone plot for direct comparison.

@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 Format based on Keep a Changelog.
 
+## [Unreleased]
+
+### Added
+
+- `ends_at_bat` on every pitch, marking the one each at-bat ended on. Savant repeats `at_bat_result` and `description` on all of an at-bat's pitches, so neither says which pitch produced them and a five-pitch strikeout reads as five strikeouts. Nothing in the feed answers this — `result_code` is pitch-level, and a walk's fourth ball looks like its first three — so it's derived from the highest pitch number in each at-bat, checked against 10,876 at-bats of cached feeds where pitch numbers run 1..n with no earlier pitch ending anything. Exports gain a column.
+- `mound pitches --ends-at-bat` and `filter(ends_at_bat=True)`, one row per plate appearance. The flag is computed when the feed is parsed rather than from whatever a filter left behind, so `--pitch changeup --ends-at-bat` returns the changeups that ended at-bats, not each at-bat's last changeup. Two edges: an at-bat still being pitched marks nothing, since a pitcher mid-count hasn't ended anything, and an at-bat ended by a throw rather than a pitch (a runner caught stealing for the third out, about 1 in 500) still marks its last pitch, which is where the record ends even if that pitch didn't decide it.
+
+- `zone` on every pitch: Statcast's numbered zones as Baseball Savant draws them, 1-9 across the strike zone and 11-14 for the quadrants outside it, with no 10. Derived from the pitch's own coordinates rather than read from the feed's `zone` field, the same way `in_zone` already was, so the two can't drift apart. Matching Savant exactly takes three details: the grid is cut from the zone grown by one ball radius (a pitch an inch above `sz_top` is zone 1, not 11), the thirds come from that grown rectangle rather than the strike zone proper, and membership still uses the sphere overlap, whose corners are round, so a pitch clipping a corner diagonally reads as outside. Agrees with Savant's own `zone` on all 42,538 pitches in a local cache of 146 games.
+- `mound pitches --zone 5` / `--zone 11,12,13,14`, and `filter(zone=...)` taking a number or a list.
+
+- `plot_zone(kind="zones")` (`mound zone --kind zones`), a heatmap binned into Statcast's numbered zones instead of a 25x25 histogram, with each cell labeled by its count and its number. Only the nine in-zone cells are shaded: 11-14 run out to wherever a pitch landed, so they gather more pitches than any single cell almost by definition, and shading them on the same ramp darkened the border and flattened the nine cells the chart is about. They print their counts instead. In place of the strike zone box the other kinds draw, the grid carries a heavy line one ball radius outside it, since that is the edge the numbering is actually cut on. Counts come from each pitch's own `zone`, measured against the batter it was thrown to, while the cells are drawn from the panel's average zone -- the same averaging every strike zone in these plots already does, so a pitch can be counted in a cell its own dot wouldn't sit in.
+- `plot_zone(grid=True)` (`mound zone --grid`), drawing the 3x3 grid under a scatter, heatmap or KDE surface, for reading a plot against the zones `--zone` would return. Clipped to the drawn strike zone rather than to the grid's own outer edge, which sits a ball radius further out and would read as a second, wrong zone box.
+
+### Fixed
+
+- The half-plate constant was rounded to `0.708` feet, five hundredths of an inch short of the true 17/24. Small enough to look harmless and large enough to matter: it put 4 pitches per 42,538 in the wrong zone and disagreed with Savant's own `isInZone` on 2, so the README's "zero mismatches" claim was off by two. Now exact, and `in_zone` matches Savant on all 42,538. Drawn strike zones move by half a thousandth of a foot -- a fraction of a pixel, visible in the committed images only as antialiasing along the box edge.
+
+### Changed
+
+- The `mound pitches` table gained at-bat, count, batter and zone columns, and prints `at_bat_result` only on the pitch that produced it. The inning alone can't separate three at-bats in the same inning, which is what made a repeated result confusing to read in the first place; the count also shows where a pitch-type filter is hiding pitches, since a jump from 0-1 to 1-2 means a slider went by in between.
+- The same table pays for that width by stating whatever doesn't vary once, in a headline above the rows, instead of down a column: the pitcher, the date of a single outing, the hitter in a matchup, the type behind `--pitch splitter`. Pitch types show as Statcast codes in the rows and by name in the headline, `zone` replaces `in_zone` because 1-9 versus 11-14 says the same thing in two characters and adds the location, and a truncated table now says `Showing 20 of 77 pitch(es).` rather than reporting a total it isn't showing. What counts as unvarying is read from the whole collection, so a `--limit` landing mid-at-bat can't promote a column that actually differs.
+
 ## [0.8.0] - 2026-08-16
 
 ### Added
