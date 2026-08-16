@@ -4,19 +4,19 @@ All notable changes to this project will be documented in this file.
 
 Format based on Keep a Changelog.
 
-## [Unreleased]
+## [0.8.0] - 2026-08-16
 
 ### Added
 
 - `mound zone --color-by {pitch_type,stand,none}`, exposing a `plot_zone()` argument the CLI couldn't reach before, and a color lookup for batter handedness so `color_by="stand"` actually renders lefties and righties as two colors instead of one undifferentiated gray. Handedness draws the house green against the splitter's orange: an earthier clay looked better but collapsed into nearly the same olive as the green under red-green color blindness, where this pair keeps a 20-point lightness gap. It's the one-panel counterpart to `--split-by stand`: color holds both sides against the same axes, splitting gives each its own strike zone.
 - The legend key labels handedness as "vs LHB"/"vs RHB", matching what `split_by` already titles its panels, and orders the two the same way (left, then right). Pitch types still read most-common-first, so the key doubles as a pitch mix.
+- `scripts/make_docs_images.py` regenerates every plot committed to `docs/images/`, each pinned to the window it was first made from rather than a relative one like `last=4`, so a styling change can be re-rendered without the figures quietly sliding forward to last night's start and contradicting the prose around them.
 
 ### Changed
 
 - Density surfaces (`plot_zone(kind="heatmap")` and `kind="kde"`) run yellow-to-green instead of cream-to-red, so a chart embedded on moundcli.com no longer fights the page around it. The ramp is ColorBrewer's 7-class YlGn, whose stops already step down in even increments of perceived lightness, plus one darker stop: YlGn ends at a medium-dark green that left the hottest cell short of the punch a peak wants, and the site's own darkest green supplies it. The yellow low end earns its place by keeping a one-pitch bin visible against the plot background, which a green that faint wouldn't be.
 - A single-color scatter (`color_by=None`, or a value the active palette doesn't recognize) draws in green rather than neutral gray, for the same reason.
 - A scatter showing only one pitch type now draws in that house green too, instead of that pitch's own color. A color that separates nothing isn't worth spending, and the headline already names the pitch; this is the same reasoning behind drawing no legend key for a single group. The trade is that a splitter is no longer orange in every chart it appears in, only in the ones where the color tells it apart from something. The rule is decided against the whole figure rather than each panel, so a `split_by` pair can't end up keyed by color on one side and not the other.
-- `scripts/make_docs_images.py` regenerates every plot committed to `docs/images/`, each pinned to the window it was first made from rather than a relative one like `last=4`, so a styling change can be re-rendered without the figures quietly sliding forward to last night's start and contradicting the prose around them.
 
 ### Fixed
 

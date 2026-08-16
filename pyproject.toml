@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mound"
-version = "0.7.1"
+version = "0.8.0"
 description = "A CLI and Python toolkit for acquiring, analyzing and visualizing MLB pitch-level data."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -44,6 +44,26 @@ Issues = "https://github.com/stiles/mound/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mound"]
+
+# Hatchling skips files the root .gitignore lists, but not ones a nested
+# .gitignore lists, so site/node_modules and site/.next were landing in the
+# sdist (337 MB of it, past PyPI's own limit). Naming what belongs keeps the
+# sdist to the package, its tests and its docs no matter what else grows in
+# the repo root. Every pattern is anchored with a leading slash: an
+# unanchored "README.md" matches at any depth, which pulls in a README from
+# each of a thousand npm packages.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/mound",
+    "/tests",
+    "/docs",
+    "/examples",
+    "/scripts",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/ROADMAP.md",
+    "/LICENSE",
+]
 
 [tool.ruff]
 line-length = 100
