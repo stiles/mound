@@ -14,6 +14,7 @@ HTML, so it isn't available to a plain HTTP fetch.
 
 from __future__ import annotations
 
+import html
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -41,9 +42,13 @@ def clip_page_url(pitch_id: str) -> str:
     return f"{CLIP_PAGE_URL}?playId={pitch_id}"
 
 
-def _extract_mp4_url(html: str) -> str | None:
-    match = _MP4_SOURCE_RE.search(html)
-    return match.group(1) if match else None
+def _extract_mp4_url(page: str) -> str | None:
+    match = _MP4_SOURCE_RE.search(page)
+    if match is None:
+        return None
+    # The URL ends in a base64 blob, and Savant escapes its `=` padding as
+    # `&#x3D;` in the attribute. Fetching that literally is a 404.
+    return html.unescape(match.group(1))
 
 
 def resolve_video_url(pitch_id: str) -> str:

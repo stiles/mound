@@ -77,6 +77,13 @@ def test_extract_mp4_url_returns_none_when_absent():
     assert _extract_mp4_url(html) is None
 
 
+def test_extract_mp4_url_unescapes_base64_padding():
+    """Savant writes the URL's `=` padding as `&#x3D;`, which 404s if kept."""
+    escaped = '<video><source src="https://sporty-clips.mlb.com/QXdGVw&#x3D;&#x3D;.mp4"></video>'
+
+    assert _extract_mp4_url(escaped) == "https://sporty-clips.mlb.com/QXdGVw==.mp4"
+
+
 def test_resolve_video_url_returns_mp4_url(mocked_responses):
     mocked_responses.add(
         responses_lib.GET,

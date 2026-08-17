@@ -274,7 +274,13 @@ mound zone "Roki Sasaki" --last 4 --pitch splitter --color-by stand --out splitt
 
 Coloring holds the two groups against the same axes, which is the easier comparison on a small sample; splitting gives each side its own strike zone, drawn from the batters actually faced, which the single panel has to average into one box.
 
-Scatter points are colored by pitch type unless you say otherwise. A plot of one pitch type is the exception: the color would separate it from nothing and the headline already names the pitch, so it draws in a single house color instead — which is also what `color_by=None` (`--color-by none`) forces. Color is a scatter-only setting; heatmaps, zone counts and KDE surfaces ignore it.
+Scatter points are colored by pitch type unless you say otherwise:
+
+![Tarik Skubal's five pitch types in one start](docs/images/skubal_arsenal_zone.png)
+
+A pitch's color comes from its name rather than from its position in the chart, so a four-seamer is the same blue in every plot you make. Which pitch got which color was settled by measurement: grouping strictly by family put three shades of one blue on the four-seamer, the sinker and the cutter, which are precisely the pitches most likely to share a chart — a four-seamer and a sinker turn up in the same outing in 286 of 620 cached pitcher-games. The assignment now maximizes perceptual distance between the pairs that actually co-occur, weighted by how often they do and counting red-green color blindness. What's left of the family idea is the part that costs nothing: the two slider variants stay close, because a sweeper is a slider.
+
+A plot of one pitch type is the exception: the color would separate it from nothing and the headline already names the pitch, so it draws in a single house color instead — which is also what `color_by=None` (`--color-by none`) forces. Color is a scatter-only setting; heatmaps, zone counts and KDE surfaces ignore it.
 
 ## At-bat outcomes
 
@@ -405,6 +411,7 @@ Only the clip page's default embedded angle is captured this way (in practice, t
 ## Examples
 
 - [Did Díaz miss "right in the middle"?](docs/examples/diaz-blown-saves.md) — a full walkthrough, from a pitcher's name to a fact-checked postgame quote: finding his recent games, pulling every pitch, breaking down the mix and arsenal, testing a claim about location against the data, and downloading the video. Runnable as `examples/diaz_blown_saves.py`.
+- [Is Ohtani chasing spin away?](docs/examples/ohtani-spin-chase.md) — the same treatment from the hitter's side, testing a hunch from watching games: counting plate appearances with `ends_at_bat`, finding the pitch each strikeout ended on, working out which side of the plate is "away" from hit-by-pitch locations, and splitting chase rate by pitch family and side. Runnable as `examples/shohei_spin_chase.py`, with `examples/shohei_strikeout_supercut.py` stitching every strikeout's clip into one labeled video.
 - `examples/roki_sasaki_end_to_end.py` — the shorter tour: retrieve, filter to one pitch type, calculate, plot, export.
 
 ## Data sources
