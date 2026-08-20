@@ -66,10 +66,20 @@ mound zone "Roki Sasaki" --pitch splitter --last 4 --kind zones --out splitter_z
 # Just the pitch each at-bat ended on, one row per plate appearance
 mound pitches "Roki Sasaki" --last 1 --ends-at-bat
 
+# The same question from the batter's side: every pitch he faced,
+# across every pitcher, or narrowed to one matchup
+mound faced "Shohei Ohtani" --last 5
+mound faced "Shohei Ohtani" --last 5 --pitcher "Roki Sasaki"
+
+# mix/results/arsenal/zone/video all have a `faced-` counterpart, built
+# on the batter's own game log instead of a pitcher's starts
+mound faced-arsenal "Shohei Ohtani" --last 8 --pitcher "Roki Sasaki"
+mound faced-zone "Shohei Ohtani" --last 8 --out ohtani_zone.png
+
 # Narrow to Statcast's numbered zones: 1-9 in the zone, 11-14 outside it
 mound pitches "Roki Sasaki" --last 4 --zone 5
 
-Could we also derive an MLB zone from the pitch? # Export the underlying data
+# Export the underlying data
 mound pitches "Roki Sasaki" --last 4 --export roki_last4.csv
 
 # Cache Savant responses locally; a later run for the same pitcher only
@@ -149,7 +159,12 @@ roki.pitches(last=4, batter="perdomo").pitch_mix()
 roki.pitches(last=4).filter(batter=[672695, "Lindor"])  # several hitters at once
 ```
 
-`Batter` asks the same question from the other side — the pitches a hitter *faced*, from every arm he saw:
+`Batter` asks the same question from the other side — the pitches a hitter *faced*, from every arm he saw. `mound faced` is its CLI counterpart to `mound pitches`:
+
+```bash
+mound faced "Geraldo Perdomo" --last 5
+mound faced "Geraldo Perdomo" --last 5 --pitcher "Roki Sasaki"
+```
 
 ```python
 from mound import Batter
@@ -164,7 +179,7 @@ faced.pitch_mix()       # what pitchers fed him
 faced.plot_zone(out="perdomo_zone.png")
 ```
 
-Both sides return the same pitches for a given matchup, so pick whichever player is the subject of the question. `Pitcher.pitches(batter=...)` is the cheaper route for a one-off matchup, since a starter appears in a fraction of the games a hitter plays and Mound fetches one Savant response per game.
+Both sides return the same pitches for a given matchup, so pick whichever player is the subject of the question. `mound pitches --batter`/`Pitcher.pitches(batter=...)` is the cheaper route for a one-off matchup, since a starter appears in a fraction of the games a hitter plays and Mound fetches one Savant response per game; `mound faced`/`Batter.pitches()` is the one to reach for when the hitter himself is the subject.
 
 ## Whiff rate, chase rate and pitch metrics
 
@@ -207,6 +222,8 @@ forkball                  5      88.2      758.2                7.1             
 ```
 
 The two rates read differently on purpose: the four-seamer lives in the zone (6.2% chase rate) and gets missed when hitters swing, while the splitter's whole job is to be chased below it (57.9%). A `chase_rate` of `NaN` means that pitch type never left the zone, so there was nothing to chase.
+
+Every one of these commands has a batter-side counterpart, prefixed `faced-`, built on `Batter` instead of `Pitcher`: `mound faced-mix`, `mound faced-results`, `mound faced-arsenal`, `mound faced-zone` and `mound faced-video` ask the same questions from the hitter's side, e.g. `mound faced-arsenal "Shohei Ohtani" --last 8 --pitcher "Roki Sasaki"`.
 
 ## Plots
 
@@ -438,7 +455,6 @@ Tests run entirely against mocked HTTP fixtures in `tests/fixtures/` (via the `r
 - Caching is opt-in and off by default — every call re-fetches unless `cache=True`/`--cache` is given, and games in progress are never cached (see [Caching](#caching)).
 - Pitch classification comes from Statcast's own model and can be inconsistent for pitches with unusual movement (see the Roki Sasaki note above).
 - `in_zone` is Statcast's calculated geometry, not the umpire's call, and `is_strike` isn't the same thing as "located in the zone" — see [`is_strike` vs. `in_zone`](#is_strike-vs-in_zone) above.
-- Only pitchers are supported as the primary retrieval unit; there's no batter-vs-pitcher matchup view yet (see [ROADMAP.md](ROADMAP.md)).
 - Historical data availability depends on Statcast/Savant coverage, which is generally reliable from 2015 onward.
 - All requests are synchronous and unthrottled beyond basic retry/backoff; heavy bulk retrieval (e.g. a full season) will be slow.
 - Video downloads only capture a clip page's default embedded broadcast angle (see [Video downloads](#video-downloads)).

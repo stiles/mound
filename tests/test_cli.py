@@ -160,6 +160,86 @@ def test_pitches_ends_at_bat_composes_with_other_filters(mocked_responses, runne
     assert "Strikeout" not in result.stdout
 
 
+def test_faced_table_shows_which_pitcher_threw_each_pitch(mocked_responses, runner):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    result = runner.invoke(app, ["faced", "500001", "--game", "1004"])
+
+    assert result.exit_code == 0
+    assert _headline(result) == "Test Batter 1 · 2025-08-20 · game 1004"
+    assert "pitcher" in _header(result)
+    assert "4 pitch(es) total." in result.stdout
+
+
+def test_faced_promotes_a_single_pitcher_out_of_the_rows(mocked_responses, runner):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    result = runner.invoke(app, ["faced", "500001", "--game", "1004", "--pitcher", "Roki Sasaki"])
+
+    assert result.exit_code == 0
+    assert _headline(result) == "Test Batter 1 · vs Roki Sasaki · 2025-08-20 · game 1004"
+    assert "pitcher" not in _header(result)
+    assert "2 pitch(es) total." in result.stdout
+
+
+def test_faced_filters_by_pitch_type(mocked_responses, runner):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    result = runner.invoke(app, ["faced", "500001", "--game", "1004", "--pitch", "splitter"])
+
+    assert result.exit_code == 0
+    assert "1 pitch(es) total." in result.stdout
+
+
+def test_faced_mix_prints_pitch_type_percentages(mocked_responses, runner):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    result = runner.invoke(app, ["faced-mix", "500001", "--game", "1004"])
+
+    assert result.exit_code == 0
+    # 4 pitches faced: 2 sliders, 1 four-seamer, 1 splitter.
+    assert "slider" in result.stdout
+    assert "50.0%" in result.stdout
+
+
+def test_faced_results_breaks_down_by_pitch_type(mocked_responses, runner):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    result = runner.invoke(app, ["faced-results", "500001", "--game", "1004"])
+
+    assert result.exit_code == 0
+    assert "slider" in result.stdout
+
+
+def test_faced_arsenal_scopes_to_one_pitcher(mocked_responses, runner):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+
+    result = runner.invoke(
+        app, ["faced-arsenal", "500001", "--game", "1004", "--pitcher", "Roki Sasaki"]
+    )
+
+    assert result.exit_code == 0
+    assert "whiff_rate" in result.stdout
+    assert "chase_rate" in result.stdout
+
+
+def test_faced_zone_writes_a_plot(mocked_responses, runner, tmp_path):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_gf(mocked_responses, 1004, "gf_game_1004.json")
+    out = tmp_path / "faced_zone.png"
+
+    result = runner.invoke(app, ["faced-zone", "500001", "--game", "1004", "--out", str(out)])
+
+    assert result.exit_code == 0
+    assert out.exists()
+
+
 def test_pitches_reports_no_matches_without_failing(mocked_responses, runner):
     _register_game_1001(mocked_responses)
 

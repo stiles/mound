@@ -26,5 +26,4 @@ Sensible next steps beyond the initial prototype, roughly grouped by theme. None
 ## More discovery
 
 - **Additional player and game discovery tools.** Team rosters, schedules, and box-score lookups as their own CLI commands/Python functions, rather than only being usable indirectly through `Pitcher`.
-- **A CLI surface for the batter side.** `Batter` covers pitches faced in Python, but the CLI only reaches matchups from the pitcher's side (`--batter`). A `mound faced "Geraldo Perdomo" --last 5` (or a `mound matchup PITCHER BATTER` that prints mix, results and whiff/chase in one table) would close the gap. Worth settling first: whether a hitter's every-pitch-faced query is worth the fetch cost, since it means one Savant response per game played rather than per start.
-- **Hitter-side metrics.** `chase_rate()` and friends already work on a `Batter` collection, but plate-discipline framing (zone rate seen, swing decisions by count) and contact quality would make the batter side more than a mirror of the pitcher's numbers.
+- **Hitter-side metrics.** `chase_rate()` already works on a `Batter` collection, but plate-discipline framing beyond it (zone rate seen, swing decisions by count) and contact quality would make the batter side more than a mirror of the pitcher's numbers.
