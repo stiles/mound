@@ -99,6 +99,18 @@ def test_pitches_keeps_the_date_in_the_rows_across_games(mocked_responses, runne
     assert _header(result)[0] == "date"
 
 
+def test_pitches_season_pulls_every_game_in_that_year(mocked_responses, runner):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_2025.json", season=2025)
+    for game_pk in (1001, 1002, 1003):
+        register_gf(mocked_responses, game_pk, f"gf_game_{game_pk}.json")
+
+    result = runner.invoke(app, ["pitches", "808963", "--season", "2025"])
+
+    assert result.exit_code == 0
+    assert _headline(result) == "Roki Sasaki · 2025-07-10 to 2025-08-15 · 3 games"
+
+
 def test_pitches_filters_by_zone(mocked_responses, runner):
     _register_game_1001(mocked_responses)
 
@@ -192,6 +204,61 @@ def test_faced_filters_by_pitch_type(mocked_responses, runner):
 
     assert result.exit_code == 0
     assert "1 pitch(es) total." in result.stdout
+
+
+def test_faced_season_pulls_every_game_a_batter_played(mocked_responses, runner):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_game_log(
+        mocked_responses, 500001, "hitting_game_log_2025.json", season=2025, group="hitting"
+    )
+    for game_pk in (1001, 1003, 1004):
+        register_gf(mocked_responses, game_pk, f"gf_game_{game_pk}.json")
+
+    result = runner.invoke(app, ["faced", "500001", "--season", "2025"])
+
+    assert result.exit_code == 0
+    assert "3 games" in _headline(result)
+
+
+def test_games_lists_appearances_without_fetching_pitches(mocked_responses, runner):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_2025.json", season=2025)
+    # No `register_gf` calls: a bare game list should never reach Savant.
+
+    result = runner.invoke(app, ["games", "808963", "--season", "2025"])
+
+    assert result.exit_code == 0
+    assert _headline(result) == "Roki Sasaki · 3 game(s)"
+    assert "1001" in result.stdout
+    assert "Arizona Diamondbacks" in result.stdout
+    assert "home" in result.stdout
+    assert "away" in result.stdout
+
+
+def test_games_last_n_selects_most_recent(mocked_responses, runner):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_2025.json", season=2025)
+
+    result = runner.invoke(app, ["games", "808963", "--last", "2", "--season", "2025"])
+
+    assert result.exit_code == 0
+    assert _headline(result) == "Roki Sasaki · 2 game(s)"
+    assert "1001" not in result.stdout
+    assert "1002" in result.stdout
+    assert "1003" in result.stdout
+
+
+def test_faced_games_lists_appearances_for_a_batter(mocked_responses, runner):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_game_log(
+        mocked_responses, 500001, "hitting_game_log_2025.json", season=2025, group="hitting"
+    )
+
+    result = runner.invoke(app, ["faced-games", "500001", "--season", "2025"])
+
+    assert result.exit_code == 0
+    assert _headline(result) == "Test Batter 1 · 3 game(s)"
+    assert "1004" in result.stdout
 
 
 def test_faced_mix_prints_pitch_type_percentages(mocked_responses, runner):

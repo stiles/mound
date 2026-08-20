@@ -25,5 +25,5 @@ Sensible next steps beyond the initial prototype, roughly grouped by theme. None
 
 ## More discovery
 
-- **Additional player and game discovery tools.** Team rosters, schedules, and box-score lookups as their own CLI commands/Python functions, rather than only being usable indirectly through `Pitcher`.
+- **Team and league-wide discovery tools.** `games()` (`mound games`/`mound faced-games`) covers a single player's own appearances; team rosters, schedules, and box-score lookups that aren't scoped to one player already known to Mound are still their own gap.
 - **Hitter-side metrics.** `chase_rate()` already works on a `Batter` collection, but plate-discipline framing beyond it (zone rate seen, swing decisions by count) and contact quality would make the batter side more than a mirror of the pitcher's numbers.

@@ -31,6 +31,50 @@ def test_pitcher_resolves_identity(mocked_responses):
     assert pitcher.name == "Roki Sasaki"
 
 
+def test_pitcher_games_lists_appearances_without_fetching_pitches(mocked_responses):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_2025.json", season=2025)
+    # Deliberately no `register_gf` calls: `games()` should never reach Savant.
+
+    games = Pitcher(808963).games(last=2, season=2025)
+
+    assert list(games["game_pk"]) == [1002, 1003]
+    assert list(games["opponent_name"]) == ["San Francisco Giants", "Arizona Diamondbacks"]
+    assert list(games["is_home"]) == [False, True]
+    assert list(games["game_date"].astype(str)) == ["2025-08-01", "2025-08-15"]
+
+
+def test_pitcher_games_filters_by_date_range(mocked_responses):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_2025.json", season=2025)
+
+    games = Pitcher(808963).games(since="2025-07-15", until="2025-08-10")
+
+    assert list(games["game_pk"]) == [1002]
+
+
+def test_pitcher_games_with_no_matches_has_expected_columns(mocked_responses):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_2025.json", season=2025)
+
+    games = Pitcher(808963).games(since="2030-01-01")
+
+    assert games.empty
+    assert list(games.columns) == ["game_date", "game_pk", "opponent_name", "is_home"]
+
+
+def test_batter_games_lists_appearances_without_fetching_pitches(mocked_responses):
+    register_person(mocked_responses, 500001, "people_500001.json")
+    register_game_log(
+        mocked_responses, 500001, "hitting_game_log_2025.json", season=2025, group="hitting"
+    )
+
+    games = Batter(500001).games(season=2025)
+
+    assert list(games["game_pk"]) == [1001, 1003, 1004]
+    assert list(games["opponent_name"]) == ["Los Angeles Dodgers"] * 3
+
+
 def test_pitches_last_n_selects_most_recent_games(mocked_responses):
     _register_roki_with_all_games(mocked_responses)
 

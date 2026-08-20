@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 Format based on Keep a Changelog.
 
+## [Unreleased]
+
+### Added
+
+- `Pitcher.games()`/`Batter.games()` and the `mound games`/`mound faced-games` CLI commands: a plain list of a player's games -- date, opponent, home/away, `game_pk` -- for the last N appearances or a whole season. Reads only the Stats API's game log, which Mound already fetched internally to decide which games to pull pitches from; exposing it directly answers "which games" without paying for a Baseball Savant round trip per game just to find out. Returns a DataFrame, so the `game_pk` column feeds straight into `pitches(game=...)` once you've picked which games are worth the fetch.
+- `--season` on `pitches`, `faced`, `mix`, `faced-mix`, `results`, `faced-results`, `arsenal`, `faced-arsenal`, `zone`, `faced-zone`, `video` and `faced-video`. `Pitcher.pitches(season=...)`/`Batter.pitches(season=...)` have taken a season since the beginning, but the CLI only exposed `--last`/`--since`/`--until` until `games`/`faced-games` added `--season` -- now every command that selects games shares the same four options.
+
 ## [0.10.0] - 2026-08-20
 
 ### Added

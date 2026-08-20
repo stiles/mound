@@ -41,8 +41,14 @@ Requires Python 3.10+.
 # Find a player and their MLB ID
 mound search "Roki Sasaki"
 
-# Retrieve pitches from his last 4 starts
+# List his games -- date, opponent, home/away, game_pk -- without
+# fetching a single pitch (last N appearances, or a whole season)
+mound games "Roki Sasaki" --last 4
+mound games "Roki Sasaki" --season 2026
+
+# Retrieve pitches from his last 4 starts, or a whole season
 mound pitches "Roki Sasaki" --last 4
+mound pitches "Roki Sasaki" --season 2026
 
 # Isolate one pitch type
 mound pitches "Roki Sasaki" --last 4 --pitch splitter
@@ -70,6 +76,7 @@ mound pitches "Roki Sasaki" --last 1 --ends-at-bat
 # across every pitcher, or narrowed to one matchup
 mound faced "Shohei Ohtani" --last 5
 mound faced "Shohei Ohtani" --last 5 --pitcher "Roki Sasaki"
+mound faced-games "Shohei Ohtani" --last 5
 
 # mix/results/arsenal/zone/video all have a `faced-` counterpart, built
 # on the batter's own game log instead of a pitcher's starts
@@ -104,6 +111,12 @@ Run `mound --help` or `mound <command> --help` for the full option list.
 from mound import Pitcher
 
 roki = Pitcher("Roki Sasaki")
+
+# Which games, without fetching a single pitch: date, opponent,
+# home/away, game_pk -- a plain DataFrame from the cheap Stats API
+# game log, no Baseball Savant lookup
+roki.games(last=4)
+roki.games(season=2026)
 
 pitches = roki.pitches(last=4)
 splitters = pitches.filter(pitch_type="splitter")
@@ -144,6 +157,33 @@ splitters.download_videos(out_dir="clips")
 `.filter()` additionally takes what Mound derives rather than retrieves — `is_strike`, `in_zone` (see [`is_strike` vs. `in_zone`](#is_strike-vs-in_zone)), `zone` (see [Zones](#zones)) and `ends_at_bat` (see [At-bat outcomes](#at-bat-outcomes)) — since those only make sense once the data is in hand.
 
 Filtering a `PitchCollection` always returns another `PitchCollection`, so any combination of `.filter()`, `.pitch_mix()`, `.strike_rate()`, `.plot_zone()` and export methods composes freely.
+
+## Games
+
+Sometimes the question is just "which games" — the last few starts, or everything in a season — with no need for pitch-level detail yet. `games()` (`mound games`/`mound faced-games`) answers that on its own, using the same `last`/`since`/`until`/`season` selection as `pitches()` but reading only the Stats API's game log: one HTTP request per season, no Baseball Savant lookup, so it's much cheaper than pulling full pitch data just to see what's there:
+
+```bash
+mound games "Roki Sasaki" --last 4
+mound games "Roki Sasaki" --season 2026
+mound faced-games "Shohei Ohtani" --last 10
+```
+
+```python
+roki.games(season=2025)
+```
+
+```
+    game_date  game_pk         opponent_name  is_home
+0  2025-07-10     1001  Arizona Diamondbacks     True
+1  2025-08-01     1002  San Francisco Giants    False
+2  2025-08-15     1003  Arizona Diamondbacks     True
+```
+
+It returns a plain DataFrame, so the `game_pk` column feeds straight into `pitches(game=...)` once you've picked which of those games are actually worth the fetch:
+
+```python
+roki.pitches(game=roki.games(last=4)["game_pk"].tolist())
+```
 
 ## Matchups
 

@@ -1,8 +1,10 @@
 """Mound's command-line interface.
 
 mound search "Roki Sasaki"
+mound games "Roki Sasaki" --last 4
+mound games "Roki Sasaki" --season 2026
 mound pitches "Roki Sasaki" --last 4 --pitch splitter
-mound pitches "Roki Sasaki" --last 1 --ends-at-bat
+mound pitches "Roki Sasaki" --season 2026 --ends-at-bat
 mound faced "Shohei Ohtani" --last 5 --pitcher "Roki Sasaki"
 mound mix "Roki Sasaki" --last 4
 mound faced-mix "Shohei Ohtani" --last 5
@@ -79,6 +81,9 @@ def main(
 LastOption = Annotated[int | None, typer.Option("--last", help="Most recent N appearances")]
 SinceOption = Annotated[str | None, typer.Option("--since", help="Start date (YYYY-MM-DD)")]
 UntilOption = Annotated[str | None, typer.Option("--until", help="End date (YYYY-MM-DD)")]
+SeasonOption = Annotated[
+    int | None, typer.Option("--season", help="A single MLB season, e.g. 2026")
+]
 GameOption = Annotated[int | None, typer.Option("--game", help="A specific MLB game_pk")]
 PitchOption = Annotated[str | None, typer.Option("--pitch", help="Pitch type, e.g. 'splitter'")]
 StandOption = Annotated[str | None, typer.Option("--stand", help="Batter side ('L' or 'R')")]
@@ -262,6 +267,24 @@ def _pitch_table(collection: PitchCollection, limit: int | None) -> str:
     return f"{' · '.join(headline)}\n{table}"
 
 
+def _games_table(player_name: str, games: pd.DataFrame) -> str:
+    """Render a player's game log: date, opponent, home/away, game_pk."""
+    headline = f"{player_name} · {len(games)} game(s)"
+    if games.empty:
+        return headline
+
+    home_away = games["is_home"].map({True: "home", False: "away"}).fillna("")
+    table = pd.DataFrame(
+        {
+            "date": games["game_date"],
+            "opponent": games["opponent_name"].fillna(""),
+            "": home_away,
+            "game_pk": games["game_pk"],
+        }
+    ).to_string(index=False)
+    return f"{headline}\n{table}"
+
+
 def _get_pitches(
     name: str,
     *,
@@ -270,6 +293,7 @@ def _get_pitches(
     until: str | None,
     game: int | None,
     pitch: str | None,
+    season: int | None = None,
     stand: str | None = None,
     batter: str | None = None,
     at_bat_number: int | None = None,
@@ -290,6 +314,7 @@ def _get_pitches(
             since=since,
             until=until,
             game=game,
+            season=season,
             pitch_type=pitch,
             stand=stand,
             batter=batter,
@@ -309,6 +334,7 @@ def _get_faced_pitches(
     until: str | None,
     game: int | None,
     pitch: str | None,
+    season: int | None = None,
     stand: str | None = None,
     pitcher: str | None = None,
     at_bat_number: int | None = None,
@@ -329,6 +355,7 @@ def _get_faced_pitches(
             since=since,
             until=until,
             game=game,
+            season=season,
             pitch_type=pitch,
             stand=stand,
             pitcher=pitcher,
@@ -487,12 +514,71 @@ def search(
 
 
 @app.command()
+def games(
+    name: str = typer.Argument(..., help="Pitcher name or MLB player ID"),
+    last: LastOption = None,
+    since: SinceOption = None,
+    until: UntilOption = None,
+    season: SeasonOption = None,
+) -> None:
+    """List a pitcher's games -- date, opponent, home/away, game_pk.
+
+    Reads only the Stats API's game log, with no Baseball Savant lookup, so
+    it's the cheap way to see which games exist before pulling pitches for
+    any of them. With no arguments, defaults to the current season.
+    """
+    try:
+        pitcher = Pitcher(name)
+    except PlayerNotFoundError as exc:
+        _fail(str(exc))
+    except AmbiguousPlayerError as exc:
+        _fail(str(exc))
+
+    try:
+        found = pitcher.games(last=last, since=since, until=until, season=season)
+    except Exception as exc:  # surface retrieval failures without a traceback
+        _fail(f"Failed to retrieve games for {pitcher.name}: {exc}")
+
+    typer.echo(_games_table(pitcher.name, found))
+
+
+@app.command(name="faced-games")
+def faced_games(
+    name: str = typer.Argument(..., help="Batter name or MLB player ID"),
+    last: LastOption = None,
+    since: SinceOption = None,
+    until: UntilOption = None,
+    season: SeasonOption = None,
+) -> None:
+    """List the games a batter played -- date, opponent, home/away, game_pk.
+
+    The batter-side counterpart to `mound games`: `last` counts games played
+    rather than starts, and the opponent column names whichever team he
+    faced that day, across however many pitchers took the mound for them.
+    """
+    try:
+        batter = Batter(name)
+    except PlayerNotFoundError as exc:
+        _fail(str(exc))
+    except AmbiguousPlayerError as exc:
+        _fail(str(exc))
+
+    try:
+        found = batter.games(last=last, since=since, until=until, season=season)
+    except Exception as exc:  # surface retrieval failures without a traceback
+        _fail(f"Failed to retrieve games for {batter.name}: {exc}")
+
+    typer.echo(_games_table(batter.name, found))
+
+
+@app.command()
 def pitches(
     name: str = typer.Argument(..., help="Pitcher name or MLB player ID"),
     last: LastOption = None,
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     batter: BatterOption = None,
@@ -523,6 +609,7 @@ def pitches(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         batter=batter,
@@ -549,6 +636,7 @@ def faced(
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     pitcher: PitcherOption = None,
@@ -588,6 +676,7 @@ def faced(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         pitcher=pitcher,
@@ -614,6 +703,7 @@ def mix(
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     batter: BatterOption = None,
@@ -629,6 +719,7 @@ def mix(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         batter=batter,
@@ -647,6 +738,7 @@ def faced_mix(
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     pitcher: PitcherOption = None,
@@ -662,6 +754,7 @@ def faced_mix(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         pitcher=pitcher,
@@ -680,6 +773,7 @@ def results(
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     batter: BatterOption = None,
@@ -695,6 +789,7 @@ def results(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         batter=batter,
@@ -713,6 +808,7 @@ def faced_results(
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     pitcher: PitcherOption = None,
@@ -728,6 +824,7 @@ def faced_results(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         pitcher=pitcher,
@@ -746,6 +843,7 @@ def arsenal(
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     batter: BatterOption = None,
@@ -767,6 +865,7 @@ def arsenal(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         batter=batter,
@@ -785,6 +884,7 @@ def faced_arsenal(
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     pitcher: PitcherOption = None,
@@ -804,6 +904,7 @@ def faced_arsenal(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         pitcher=pitcher,
@@ -822,6 +923,7 @@ def zone(
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     batter: BatterOption = None,
@@ -843,6 +945,7 @@ def zone(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         batter=batter,
@@ -869,6 +972,7 @@ def faced_zone(
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     pitcher: PitcherOption = None,
@@ -890,6 +994,7 @@ def faced_zone(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         pitcher=pitcher,
@@ -916,6 +1021,7 @@ def video(
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     batter: BatterOption = None,
@@ -940,6 +1046,7 @@ def video(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         batter=batter,
@@ -958,6 +1065,7 @@ def faced_video(
     since: SinceOption = None,
     until: UntilOption = None,
     game: GameOption = None,
+    season: SeasonOption = None,
     pitch: PitchOption = None,
     stand: StandOption = None,
     pitcher: PitcherOption = None,
@@ -980,6 +1088,7 @@ def faced_video(
         since=since,
         until=until,
         game=game,
+        season=season,
         pitch=pitch,
         stand=stand,
         pitcher=pitcher,

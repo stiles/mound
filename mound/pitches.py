@@ -335,7 +335,7 @@ def _seasons_for_query(
     return [date.today().year]
 
 
-def _game_pks_for_player(
+def _appearances_for_player(
     player_id: int,
     *,
     group: str,
@@ -343,12 +343,14 @@ def _game_pks_for_player(
     since: DateLike | None,
     until: DateLike | None,
     season: int | None,
-) -> list[int]:
-    """Discover which games to fetch for a player, oldest first.
+) -> list[statsapi.GameAppearance]:
+    """Discover which games a player appeared in, oldest first.
 
     ``group`` is ``"pitching"`` for a pitcher's appearances or ``"hitting"``
     for a batter's; the ``last``/``since``/``until``/``season`` narrowing is
-    identical either way.
+    identical either way. This is the cheap half of retrieval -- one Stats
+    API request per season, no Baseball Savant lookup -- which is also why
+    it's exposed on its own via :meth:`Pitcher.games`/:meth:`Batter.games`.
     """
     seasons = _seasons_for_query(since, until, season)
     appearances = statsapi.game_log_seasons(player_id, seasons, group=group)
@@ -371,7 +373,43 @@ def _game_pks_for_player(
     if last is not None:
         appearances = appearances[-last:]
 
+    return appearances
+
+
+def _game_pks_for_player(
+    player_id: int,
+    *,
+    group: str,
+    last: int | None,
+    since: DateLike | None,
+    until: DateLike | None,
+    season: int | None,
+) -> list[int]:
+    """Discover which games to fetch for a player, oldest first."""
+    appearances = _appearances_for_player(
+        player_id, group=group, last=last, since=since, until=until, season=season
+    )
     return [a.game_pk for a in appearances]
+
+
+_GAME_COLUMNS = ["game_date", "game_pk", "opponent_name", "is_home"]
+
+
+def _appearances_to_frame(appearances: list[statsapi.GameAppearance]) -> pd.DataFrame:
+    if not appearances:
+        return pd.DataFrame(columns=_GAME_COLUMNS)
+    return pd.DataFrame(
+        [
+            {
+                "game_date": a.game_date,
+                "game_pk": a.game_pk,
+                "opponent_name": a.opponent_name,
+                "is_home": a.is_home,
+            }
+            for a in appearances
+        ],
+        columns=_GAME_COLUMNS,
+    )
 
 
 class Pitcher:
@@ -468,6 +506,33 @@ class Pitcher:
             batter=batter,
         )
 
+    def games(
+        self,
+        *,
+        last: int | None = None,
+        since: DateLike | None = None,
+        until: DateLike | None = None,
+        season: int | None = None,
+    ) -> pd.DataFrame:
+        """List this pitcher's games -- date, ``game_pk``, opponent, home/away.
+
+        Same ``last``/``since``/``until``/``season`` selection as
+        :meth:`pitches`, but far cheaper: this reads only the Stats API's
+        game log (one request per season), with no Baseball Savant lookup,
+        so it's the way to answer "which games" without paying for every
+        pitch of each one. Pass the resulting ``game_pk`` values straight
+        into ``pitches(game=...)`` for the ones you actually want::
+
+            roki.games(last=4)
+            roki.pitches(game=roki.games(last=4)["game_pk"].tolist())
+
+        With no arguments, defaults to the current season's appearances.
+        """
+        appearances = _appearances_for_player(
+            self.player.id, group="pitching", last=last, since=since, until=until, season=season
+        )
+        return _appearances_to_frame(appearances)
+
 
 class Batter:
     """A batter, resolved from a name or MLB player ID.
@@ -552,3 +617,22 @@ class Batter:
             stand=stand,
             pitcher=pitcher,
         )
+
+    def games(
+        self,
+        *,
+        last: int | None = None,
+        since: DateLike | None = None,
+        until: DateLike | None = None,
+        season: int | None = None,
+    ) -> pd.DataFrame:
+        """List the games this batter played -- date, ``game_pk``, opponent, home/away.
+
+        The mirror image of :meth:`Pitcher.games`, reading only the Stats
+        API's game log rather than every pitcher this batter faced. Same
+        selection as :meth:`pitches`, with ``last`` counting games played.
+        """
+        appearances = _appearances_for_player(
+            self.player.id, group="hitting", last=last, since=since, until=until, season=season
+        )
+        return _appearances_to_frame(appearances)
