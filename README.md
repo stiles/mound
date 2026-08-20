@@ -11,7 +11,35 @@ A CLI and Python toolkit for retrieving, analyzing and visualizing MLB pitch-lev
 
 Mound answers questions like these with a few CLI commands or a few lines of Python.
 
-## Install
+## Contents
+
+- [Get started](#get-started)
+  - [Install](#install)
+  - [Quickstart](#quickstart)
+- [Concepts](#concepts)
+  - [`is_strike` vs. `in_zone`](#is_strike-vs-in_zone)
+  - [Zones](#zones)
+  - [At-bat outcomes](#at-bat-outcomes)
+  - [Pitch types](#pitch-types)
+- [Working with pitches](#working-with-pitches)
+  - [Games](#games)
+  - [Matchups](#matchups)
+  - [Whiff rate, chase rate and pitch metrics](#whiff-rate-chase-rate-and-pitch-metrics)
+  - [Plots](#plots)
+- [Utilities](#utilities)
+  - [Caching](#caching)
+  - [Video downloads](#video-downloads)
+- [Project](#project)
+  - [Examples](#examples)
+  - [Data sources](#data-sources)
+  - [Known limitations](#known-limitations)
+- [Development](#development)
+- [Roadmap](#roadmap)
+- [Changelog](#changelog)
+
+## Get started
+
+### Install
 
 ```bash
 pip install mound
@@ -33,9 +61,9 @@ pip install -e .
 
 Requires Python 3.10+.
 
-## Quickstart
+### Quickstart
 
-### CLI
+#### CLI
 
 ```bash
 # Find a player and their MLB ID
@@ -105,7 +133,7 @@ mound video-id 7468ecb9-0918-3aca-8ef5-6396e6ab80c3
 
 Run `mound --help` or `mound <command> --help` for the full option list.
 
-### Python
+#### Python
 
 ```python
 from mound import Pitcher
@@ -158,7 +186,84 @@ splitters.download_videos(out_dir="clips")
 
 Filtering a `PitchCollection` always returns another `PitchCollection`, so any combination of `.filter()`, `.pitch_mix()`, `.strike_rate()`, `.plot_zone()` and export methods composes freely.
 
-## Games
+## Concepts
+
+The commands above will get you moving, but a few things about the data are easy to misread until you've hit them once. Worth a read before trusting a chart or a rate against a quote.
+
+### `is_strike` vs. `in_zone`
+
+These sound interchangeable but aren't, and it's easy to expect a plotted zone box to reconcile with the wrong one:
+
+- **`is_strike`** is whatever counts as a strike *by rule*: a called strike, a swinging strike, a foul ball, or a ball put in play. It's about the ruling, not the location — a pitch that draws a swing and a miss (or a foul, or a groundout) well outside the box still counts as a strike.
+- **`in_zone`** is purely locational: does the pitch — modeled as an actual baseball, not a point — overlap the strike-zone rectangle for that batter's `sz_top`/`sz_bot`?
+
+A good chase pitch (splitters, sweepers, low sinkers) will show a much higher `is_strike` rate than `in_zone` rate. That's the pitch working as intended, not a bug — batters are swinging at (or getting jammed by) pitches outside the zone on purpose, which is exactly what [`chase_rate()`](#whiff-rate-chase-rate-and-pitch-metrics) measures. If a `plot_zone()` subtitle's strike percentage doesn't match how many dots visually sit inside the drawn box, that's this distinction at work; check `in_zone` counts (or `.filter(in_zone=True)`) for the locational answer, not `strike_rate()`.
+
+`in_zone` models the ball as a sphere overlapping the zone rectangle, which matches Statcast's own methodology (checked against Baseball Savant's own `isInZone` field across 42,538 cached pitches with zero mismatches — see [Zones](#zones)). One consequence: a pitch can register `in_zone=True` even when its center is outside the box on *both* axes at once, as long as it's within one ball radius of a corner — a legitimate, if visually surprising, edge case. `in_zone` also reflects Statcast's calculated geometry, not the home-plate umpire's real-time call; the two disagree routinely on borderline pitches, especially double-edge corner cases (away *and* low/high at once). That's normal umpire variance, not an error in Mound.
+
+### Zones
+
+Every pitch carries `zone`, Statcast's numbered zones as they appear on Baseball Savant: 1-9 across the strike zone, read like a book from the catcher's view, and 11-14 for the quadrants outside it. There is no zone 10.
+
+```bash
+mound pitches "Roki Sasaki" --last 4 --zone 5        # the heart of the plate
+mound pitches "Roki Sasaki" --last 4 --zone 11,12,13,14
+```
+
+```python
+roki.pitches(last=4).filter(zone=5)
+roki.pitches(last=4).filter(zone=[7, 8, 9]).whiff_rate()   # down in the zone
+```
+
+Mound derives this from the pitch's own coordinates rather than reading Savant's `zone` field, the same way it derives `in_zone`, so the two can't drift apart. Reproducing Savant exactly takes three details: the grid is drawn over the zone grown by one ball radius, so a pitch an inch above `sz_top` is zone 1 rather than 11; the thirds are cut from that grown rectangle, not the strike zone proper; and membership still comes from the sphere overlap, whose corners are round, so a pitch clipping a corner diagonally reads as outside. That agrees with Savant's own `zone` on all 42,538 pitches in the local cache.
+
+Getting there turned up a real error: the half-plate constant had been rounded to `0.708` feet, five hundredths of an inch shy of the true 17/24. That was enough to put 4 pitches in the wrong zone and to disagree with Savant's `isInZone` on 2, which is why the mismatch count above is now exact rather than approximate.
+
+### At-bat outcomes
+
+`at_bat_result` and `description` describe the plate appearance, not the pitch, and Savant stamps both onto every pitch of the at-bat. Read a pitch table straight and a five-pitch strikeout looks like five strikeouts.
+
+`ends_at_bat` marks the pitch each at-bat ended on, which is the row those two fields belong to:
+
+```bash
+mound pitches "Edwin Díaz" --game 823915 --ends-at-bat
+```
+
+```python
+game.filter(ends_at_bat=True)   # one row per plate appearance
+```
+
+It's derived from the game feed as pitches are parsed rather than read off a pitch, so it survives narrowing: filtering to changeups first won't promote an at-bat's last changeup into its last pitch. Two edges are worth knowing. An at-bat still being pitched marks nothing, since nothing has ended it yet. And an at-bat that ends on a throw instead of a pitch — a runner caught stealing for the third out, roughly one at-bat in 500 — still marks its last pitch, which is where the record ends even though that pitch didn't decide it.
+
+`mound pitches` prints `at_bat_result` only on the row that produced it, for the same reason.
+
+### Pitch types
+
+Statcast tags every pitch with a short code. Mound normalizes these into human-readable names and accepts common aliases when filtering, so `pitch_type="four-seam"`, `"fastball"` and `"FF"` are all equivalent.
+
+| Code | Name | Common aliases |
+|---|---|---|
+| `FF` | four-seam fastball | fastball, four-seam |
+| `FT` | two-seam fastball | two-seam |
+| `SI` | sinker | |
+| `FC` | cutter | cut fastball |
+| `SL` | slider | |
+| `ST` | sweeper | sweeping slider |
+| `SV` | slurve | |
+| `CU` | curveball | curve |
+| `KC` | knuckle curve | |
+| `CH` | changeup | change-up |
+| `FS` | splitter | split-finger |
+| `FO` | forkball | |
+| `SC` | screwball | |
+| `KN` | knuckleball | knuckler |
+| `EP` | eephus | |
+
+**Note on Roki Sasaki's signature pitch:** Statcast classifies it inconsistently start-to-start — sometimes as a splitter (`FS`), sometimes as a forkball (`FO`), depending on its movement profile in a given game. If a `pitch_type="splitter"` query looks incomplete, check `pitch_type="forkball"` too, or filter using both.
+
+## Working with pitches
+
+### Games
 
 Sometimes the question is just "which games" — the last few starts, or everything in a season — with no need for pitch-level detail yet. `games()` (`mound games`/`mound faced-games`) answers that on its own, using the same `last`/`since`/`until`/`season` selection as `pitches()` but reading only the Stats API's game log: one HTTP request per season, no Baseball Savant lookup, so it's much cheaper than pulling full pitch data just to see what's there:
 
@@ -185,7 +290,7 @@ It returns a plain DataFrame, so the `game_pk` column feeds straight into `pitch
 roki.pitches(game=roki.games(last=4)["game_pk"].tolist())
 ```
 
-## Matchups
+### Matchups
 
 Every retrieval and filter takes a `batter`, so any command or method can be scoped to one hitter. Names match on any part of the name Savant reports, ignoring case and accents — `"perdomo"` or `"Geraldo Perdomo"` both work, and an MLB player ID settles a name that's too common to be unique:
 
@@ -221,7 +326,7 @@ faced.plot_zone(out="perdomo_zone.png")
 
 Both sides return the same pitches for a given matchup, so pick whichever player is the subject of the question. `mound pitches --batter`/`Pitcher.pitches(batter=...)` is the cheaper route for a one-off matchup, since a starter appears in a fraction of the games a hitter plays and Mound fetches one Savant response per game; `mound faced`/`Batter.pitches()` is the one to reach for when the hitter himself is the subject.
 
-## Whiff rate, chase rate and pitch metrics
+### Whiff rate, chase rate and pitch metrics
 
 `swing_rate()`, `whiff_rate()` and `chase_rate()` (each with a `by_pitch_type` option) answer "how nasty was it" from three angles:
 
@@ -265,7 +370,7 @@ The two rates read differently on purpose: the four-seamer lives in the zone (6.
 
 Every one of these commands has a batter-side counterpart, prefixed `faced-`, built on `Batter` instead of `Pitcher`: `mound faced-mix`, `mound faced-results`, `mound faced-arsenal`, `mound faced-zone` and `mound faced-video` ask the same questions from the hitter's side, e.g. `mound faced-arsenal "Shohei Ohtani" --last 8 --pitcher "Roki Sasaki"`.
 
-## Plots
+### Plots
 
 `plot_zone()` renders a headline, a dek (pitch count, strike rate, date range) and a source line around the strike-zone chart itself, rather than relying on axis titles or a boxed legend:
 
@@ -339,78 +444,9 @@ A pitch's color comes from its name rather than from its position in the chart, 
 
 A plot of one pitch type is the exception: the color would separate it from nothing and the headline already names the pitch, so it draws in a single house color instead — which is also what `color_by=None` (`--color-by none`) forces. Color is a scatter-only setting; heatmaps, zone counts and KDE surfaces ignore it.
 
-## At-bat outcomes
+## Utilities
 
-`at_bat_result` and `description` describe the plate appearance, not the pitch, and Savant stamps both onto every pitch of the at-bat. Read a pitch table straight and a five-pitch strikeout looks like five strikeouts.
-
-`ends_at_bat` marks the pitch each at-bat ended on, which is the row those two fields belong to:
-
-```bash
-mound pitches "Edwin Díaz" --game 823915 --ends-at-bat
-```
-
-```python
-game.filter(ends_at_bat=True)   # one row per plate appearance
-```
-
-It's derived from the game feed as pitches are parsed rather than read off a pitch, so it survives narrowing: filtering to changeups first won't promote an at-bat's last changeup into its last pitch. Two edges are worth knowing. An at-bat still being pitched marks nothing, since nothing has ended it yet. And an at-bat that ends on a throw instead of a pitch — a runner caught stealing for the third out, roughly one at-bat in 500 — still marks its last pitch, which is where the record ends even though that pitch didn't decide it.
-
-`mound pitches` prints `at_bat_result` only on the row that produced it, for the same reason.
-
-## `is_strike` vs. `in_zone`
-
-These sound interchangeable but aren't, and it's easy to expect a plotted zone box to reconcile with the wrong one:
-
-- **`is_strike`** is whatever counts as a strike *by rule*: a called strike, a swinging strike, a foul ball, or a ball put in play. It's about the ruling, not the location — a pitch that draws a swing and a miss (or a foul, or a groundout) well outside the box still counts as a strike.
-- **`in_zone`** is purely locational: does the pitch — modeled as an actual baseball, not a point — overlap the strike-zone rectangle for that batter's `sz_top`/`sz_bot`?
-
-A good chase pitch (splitters, sweepers, low sinkers) will show a much higher `is_strike` rate than `in_zone` rate. That's the pitch working as intended, not a bug — batters are swinging at (or getting jammed by) pitches outside the zone on purpose, which is exactly what [`chase_rate()`](#whiff-rate-chase-rate-and-pitch-metrics) measures. If a `plot_zone()` subtitle's strike percentage doesn't match how many dots visually sit inside the drawn box, that's this distinction at work; check `in_zone` counts (or `.filter(in_zone=True)`) for the locational answer, not `strike_rate()`.
-
-`in_zone` models the ball as a sphere overlapping the zone rectangle, which matches Statcast's own methodology (checked against Baseball Savant's own `isInZone` field across 42,538 cached pitches with zero mismatches — see [Zones](#zones)). One consequence: a pitch can register `in_zone=True` even when its center is outside the box on *both* axes at once, as long as it's within one ball radius of a corner — a legitimate, if visually surprising, edge case. `in_zone` also reflects Statcast's calculated geometry, not the home-plate umpire's real-time call; the two disagree routinely on borderline pitches, especially double-edge corner cases (away *and* low/high at once). That's normal umpire variance, not an error in Mound.
-
-## Zones
-
-Every pitch carries `zone`, Statcast's numbered zones as they appear on Baseball Savant: 1-9 across the strike zone, read like a book from the catcher's view, and 11-14 for the quadrants outside it. There is no zone 10.
-
-```bash
-mound pitches "Roki Sasaki" --last 4 --zone 5        # the heart of the plate
-mound pitches "Roki Sasaki" --last 4 --zone 11,12,13,14
-```
-
-```python
-roki.pitches(last=4).filter(zone=5)
-roki.pitches(last=4).filter(zone=[7, 8, 9]).whiff_rate()   # down in the zone
-```
-
-Mound derives this from the pitch's own coordinates rather than reading Savant's `zone` field, the same way it derives `in_zone`, so the two can't drift apart. Reproducing Savant exactly takes three details: the grid is drawn over the zone grown by one ball radius, so a pitch an inch above `sz_top` is zone 1 rather than 11; the thirds are cut from that grown rectangle, not the strike zone proper; and membership still comes from the sphere overlap, whose corners are round, so a pitch clipping a corner diagonally reads as outside. That agrees with Savant's own `zone` on all 42,538 pitches in the local cache.
-
-Getting there turned up a real error: the half-plate constant had been rounded to `0.708` feet, five hundredths of an inch shy of the true 17/24. That was enough to put 4 pitches in the wrong zone and to disagree with Savant's `isInZone` on 2, which is why the mismatch count above is now exact rather than approximate.
-
-## Pitch types
-
-Statcast tags every pitch with a short code. Mound normalizes these into human-readable names and accepts common aliases when filtering, so `pitch_type="four-seam"`, `"fastball"` and `"FF"` are all equivalent.
-
-| Code | Name | Common aliases |
-|---|---|---|
-| `FF` | four-seam fastball | fastball, four-seam |
-| `FT` | two-seam fastball | two-seam |
-| `SI` | sinker | |
-| `FC` | cutter | cut fastball |
-| `SL` | slider | |
-| `ST` | sweeper | sweeping slider |
-| `SV` | slurve | |
-| `CU` | curveball | curve |
-| `KC` | knuckle curve | |
-| `CH` | changeup | change-up |
-| `FS` | splitter | split-finger |
-| `FO` | forkball | |
-| `SC` | screwball | |
-| `KN` | knuckleball | knuckler |
-| `EP` | eephus | |
-
-**Note on Roki Sasaki's signature pitch:** Statcast classifies it inconsistently start-to-start — sometimes as a splitter (`FS`), sometimes as a forkball (`FO`), depending on its movement profile in a given game. If a `pitch_type="splitter"` query looks incomplete, check `pitch_type="forkball"` too, or filter using both.
-
-## Caching
+### Caching
 
 By default every call re-fetches from Baseball Savant. Pass `cache=True` (Python) or `--cache` (CLI) to cache each game's raw Savant response locally, keyed by `game_pk`:
 
@@ -426,7 +462,7 @@ Because a finished game's data never changes, a cache hit is never stale — cal
 
 A game still in progress is the exception, and Mound handles it for you: its feed is returned but never written to the cache, since tonight's fourth inning would otherwise be all you ever get for that game. Queries against a live game re-fetch every time, and go back to being cached once it's final.
 
-## Video downloads
+### Video downloads
 
 Each pitch's `pitch_id` doubles as the `playId` on a Baseball Savant clip page, which embeds a direct broadcast clip:
 
@@ -465,13 +501,15 @@ mound video-id 7468ecb9-0918-3aca-8ef5-6396e6ab80c3
 
 Only the clip page's default embedded angle is captured this way (in practice, the home broadcast feed) — the page's away-broadcast toggle loads its clip via client-side JavaScript rather than a second tag in the page's HTML, so it isn't reachable with a plain request. Pitches with no video coverage are skipped with a warning by default; pass `skip_errors=False` to raise instead.
 
-## Examples
+## Project
+
+### Examples
 
 - [Did Díaz miss "right in the middle"?](docs/examples/diaz-blown-saves.md) — a full walkthrough, from a pitcher's name to a fact-checked postgame quote: finding his recent games, pulling every pitch, breaking down the mix and arsenal, testing a claim about location against the data, and downloading the video. Runnable as `examples/diaz_blown_saves.py`.
 - [Is Ohtani chasing spin away?](docs/examples/ohtani-spin-chase.md) — the same treatment from the hitter's side, testing a hunch from watching games: counting plate appearances with `ends_at_bat`, finding the pitch each strikeout ended on, working out which side of the plate is "away" from hit-by-pitch locations, and splitting chase rate by pitch family and side. Runnable as `examples/shohei_spin_chase.py`, with `examples/shohei_strikeout_supercut.py` stitching every strikeout's clip into one labeled video.
 - `examples/roki_sasaki_end_to_end.py` — the shorter tour: retrieve, filter to one pitch type, calculate, plot, export.
 
-## Data sources
+### Data sources
 
 Mound calls two unofficial, public MLB data services directly:
 
@@ -479,6 +517,15 @@ Mound calls two unofficial, public MLB data services directly:
 - **[Baseball Savant](https://baseballsavant.mlb.com)** — the `/gf` game-feed endpoint, used for pitch-by-pitch Statcast data (location, velocity, pitch type, count, outcome).
 
 Both are unofficial and undocumented; endpoints or response shapes could change without notice. Mound sends a descriptive `User-Agent` and retries transient failures. Responses aren't cached unless you opt in with `cache=True`/`--cache` (see [Caching](#caching)).
+
+### Known limitations
+
+- Caching is opt-in and off by default — every call re-fetches unless `cache=True`/`--cache` is given, and games in progress are never cached (see [Caching](#caching)).
+- Pitch classification comes from Statcast's own model and can be inconsistent for pitches with unusual movement (see the Roki Sasaki note above).
+- `in_zone` is Statcast's calculated geometry, not the umpire's call, and `is_strike` isn't the same thing as "located in the zone" — see [`is_strike` vs. `in_zone`](#is_strike-vs-in_zone) above.
+- Historical data availability depends on Statcast/Savant coverage, which is generally reliable from 2015 onward.
+- All requests are synchronous and unthrottled beyond basic retry/backoff; heavy bulk retrieval (e.g. a full season) will be slow.
+- Video downloads only capture a clip page's default embedded broadcast angle (see [Video downloads](#video-downloads)).
 
 ## Development
 
@@ -489,15 +536,6 @@ ruff check .
 ```
 
 Tests run entirely against mocked HTTP fixtures in `tests/fixtures/` (via the `responses` library) and don't require network access.
-
-## Known limitations
-
-- Caching is opt-in and off by default — every call re-fetches unless `cache=True`/`--cache` is given, and games in progress are never cached (see [Caching](#caching)).
-- Pitch classification comes from Statcast's own model and can be inconsistent for pitches with unusual movement (see the Roki Sasaki note above).
-- `in_zone` is Statcast's calculated geometry, not the umpire's call, and `is_strike` isn't the same thing as "located in the zone" — see [`is_strike` vs. `in_zone`](#is_strike-vs-in_zone) above.
-- Historical data availability depends on Statcast/Savant coverage, which is generally reliable from 2015 onward.
-- All requests are synchronous and unthrottled beyond basic retry/backoff; heavy bulk retrieval (e.g. a full season) will be slow.
-- Video downloads only capture a clip page's default embedded broadcast angle (see [Video downloads](#video-downloads)).
 
 ## Roadmap
 
