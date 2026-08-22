@@ -3,12 +3,11 @@
 
 export const heroCommand = 'mound arsenal "Roki Sasaki" --game 825051';
 
-export const heroOutput = `                    pitches  velocity  spin_rate  release_extension  horizontal_break  induced_vertical_break  whiff_rate  chase_rate
-pitch_type
-four-seam fastball       35      98.8     2427.1                7.1              11.2                    16.9        27.3         6.2
-splitter                 32      90.2      868.1                7.2               5.3                     1.0        13.6        57.9
-slider                   14      87.1     2099.3                7.1               3.0                     0.1        40.0        33.3
-forkball                  5      88.2      758.2                7.1               2.8                    -2.0        50.0         0.0`;
+export const heroOutput = `                    pitches  usage%  strike%  whiff%  chase%  velo  spin    hb   ivb
+four-seam fastball       35    40.7     57.1    27.3     6.2  98.8  2427  11.2  16.9
+splitter                 32    37.2     81.2    13.6    57.9  90.2   868   5.3   1.0
+slider                   14    16.3     57.1    40.0    33.3  87.1  2099   3.0   0.1
+forkball                  5     5.8     60.0    50.0     0.0  88.2   758   2.8  -2.0`;
 
 export const questions = [
   "How many splitters did Roki Sasaki throw against the Diamondbacks last night?",
@@ -59,6 +58,40 @@ export const arsenal = {
   ],
 };
 
+/** `mound outing "Yoshinobu Yamamoto" --date 2026-08-21`, as printed. The
+ *  section headings are bold in a terminal; click strips the styling when the
+ *  output isn't one, which is why they're plain here. */
+export const outing = {
+  command: 'mound outing "Yoshinobu Yamamoto" --date 2026-08-21',
+  output: `Yoshinobu Yamamoto · 2026-08-21 · vs Pittsburgh Pirates · game 823911
+107 pitches · 27 batters faced · innings 1-7 · 64% strikes · 70% first-pitch strikes
+
+Plate appearances
+Strikeout     9
+Groundout     6
+Single        3
+Pop Out       3
+Hit By Pitch  2
+Double        2
+Flyout        1
+Walk          1
+
+Arsenal
+                    pitches  usage%  strike%  whiff%  chase%  velo  spin    hb    ivb
+splitter                 32    29.9     75.0    38.1    55.0  90.9  1402  10.7    1.1
+four-seam fastball       28    26.2     60.7    45.5    40.0  95.7  2246   8.6   16.2
+cutter                   21    19.6     52.4    14.3     8.3  91.5  2466   3.1    8.5
+sinker                   15    14.0     60.0     0.0     0.0  95.8  2295  15.1   11.0
+curveball                 8     7.5     75.0     0.0     0.0  76.0  2696  11.4  -15.1
+slider                    3     2.8     66.7     0.0     0.0  85.7  2781   6.8    0.3`,
+  selectors: [
+    { code: "mound outing \"Yoshinobu Yamamoto\"", body: "The most recent start. The morning-after default." },
+    { code: "--date 2026-08-21", body: "A particular day, named by opponent in the headline." },
+    { code: "--season 2025", body: "His last start of that season." },
+    { code: "--game 823911", body: "An exact game_pk, when you already have one." },
+  ],
+};
+
 export const features = [
   {
     title: "Start from a name",
@@ -73,7 +106,7 @@ export const features = [
   {
     title: "Stuff and results together",
     code: "mound arsenal",
-    body: "Velocity, spin and movement next to whiff and chase rate, so how nasty a pitch was gets answered from three angles in one table.",
+    body: "Usage and strike rate next to whiff rate, chase rate, velocity, spin and movement, so what a pitcher threw and how nasty it was share one row per pitch type.",
   },
   {
     title: "Charts that arrive finished",

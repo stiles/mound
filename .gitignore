@@ -6,6 +6,11 @@ build/
 dist/
 .venv/
 venv/
+# Written by any `uv run` in the repo. Not committed: CI installs with pip
+# across a 3.10/3.11/3.12 matrix and never reads it, and mound is a library
+# whose users resolve from pyproject metadata. Committing it would mean
+# switching CI to `uv sync --frozen` too.
+uv.lock
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/

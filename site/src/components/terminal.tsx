@@ -4,9 +4,18 @@ type TerminalProps = {
   command: string;
   output: string;
   className?: string;
+  /** The typing animation is keyed to a fixed delay from page load, so it only
+   *  reads as typing above the fold. Further down it has long since finished
+   *  and leaves a caret blinking at a command nobody watched arrive. */
+  animate?: boolean;
 };
 
-export function Terminal({ command, output, className = "" }: TerminalProps) {
+export function Terminal({
+  command,
+  output,
+  className = "",
+  animate = true,
+}: TerminalProps) {
   return (
     <div
       className={`overflow-hidden rounded-xl border border-grass-800/60 bg-grass-900 shadow-2xl shadow-grass-900/25 ${className}`}
@@ -24,17 +33,25 @@ export function Terminal({ command, output, className = "" }: TerminalProps) {
         <pre className="font-mono text-[11px] leading-relaxed text-chalk sm:text-xs lg:text-[13px]">
           <code>
             <span className="text-grass-300 select-none">$ </span>
-            <span
-              className="type-out"
-              style={{ "--chars": command.length } as CSSProperties}
-            >
-              {command}
-            </span>
-            <span className="type-caret text-grass-300" aria-hidden="true">
-              ▊
-            </span>
+            {animate ? (
+              <>
+                <span
+                  className="type-out"
+                  style={{ "--chars": command.length } as CSSProperties}
+                >
+                  {command}
+                </span>
+                <span className="type-caret text-grass-300" aria-hidden="true">
+                  ▊
+                </span>
+              </>
+            ) : (
+              <span className="whitespace-pre">{command}</span>
+            )}
             {"\n"}
-            <span className="type-output block pt-3 text-chalk/85">
+            <span
+              className={`block pt-3 text-chalk/85 ${animate ? "type-output" : ""}`}
+            >
               {output}
             </span>
           </code>

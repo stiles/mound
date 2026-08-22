@@ -264,6 +264,16 @@ class PitchCollection:
 
         return strike_rate(self, by_pitch_type=by_pitch_type)
 
+    def first_pitch_strike_rate(self, by_pitch_type: bool = False) -> float | pd.Series:
+        from mound.analysis import first_pitch_strike_rate
+
+        return first_pitch_strike_rate(self, by_pitch_type=by_pitch_type)
+
+    def plate_appearances(self) -> pd.Series:
+        from mound.analysis import plate_appearances
+
+        return plate_appearances(self)
+
     def swing_rate(self, by_pitch_type: bool = False) -> float | pd.Series:
         from mound.analysis import swing_rate
 

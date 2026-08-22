@@ -11,22 +11,28 @@ export const dynamic = "force-static";
 const INK_GRID = "rgba(255,255,255,0.07)";
 const CHALK = "rgba(255,255,255,0.85)";
 
-// A plausible arm: four-seamers up in the zone, splitters diving out the
+// A plausible arm: four-seamers up in the zone, changeups diving out the
 // bottom, a pair of sliders off the corners. Coordinates are centers within
 // the 360x420 illustration box, whose strike zone spans x 80–280, y 60–310.
+//
+// The three colors are PITCH_TYPE_COLORS entries, which is what constrains
+// the pitch types. A splitter is the more natural pitch to draw below the
+// zone, but its green (#2F7367) sits at 2.2:1 against this card's
+// background and disappears; the changeup's is the same shape of pitch in a
+// color that survives being printed on dark green.
 const pitches = [
   { x: 130, y: 110, color: "#5194C3" },
   { x: 175, y: 95, color: "#5194C3" },
   { x: 225, y: 125, color: "#5194C3" },
   { x: 155, y: 145, color: "#5194C3" },
   { x: 245, y: 105, color: "#5194C3" },
-  { x: 160, y: 290, color: "#F18851" },
-  { x: 200, y: 300, color: "#F18851" },
-  { x: 140, y: 322, color: "#F18851" },
-  { x: 182, y: 350, color: "#F18851" },
-  { x: 217, y: 332, color: "#F18851" },
-  { x: 236, y: 357, color: "#F18851" },
-  { x: 122, y: 347, color: "#F18851" },
+  { x: 160, y: 290, color: "#6FBBA8" },
+  { x: 200, y: 300, color: "#6FBBA8" },
+  { x: 140, y: 322, color: "#6FBBA8" },
+  { x: 182, y: 350, color: "#6FBBA8" },
+  { x: 217, y: 332, color: "#6FBBA8" },
+  { x: 236, y: 357, color: "#6FBBA8" },
+  { x: 122, y: 347, color: "#6FBBA8" },
   { x: 103, y: 240, color: "#C52622" },
   { x: 266, y: 266, color: "#C52622" },
 ];

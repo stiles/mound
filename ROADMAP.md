@@ -10,8 +10,8 @@ Sensible next steps beyond the initial prototype, roughly grouped by theme. None
 
 ## Reports and workflows
 
-- **Scouting reports.** A one-glance summary of a pitcher's recent form: how he's been getting outs, an arsenal breakdown, and how velocity/spin/whiff rate are trending over his last several starts. Worth deciding whether a batter-side mirror (plate discipline, chase tendencies, performance by pitch type faced) belongs alongside it.
-- **An `outing` command.** An end-to-end breakdown of one start — length, pitch mix, arsenal table, zone charts — as a single report, instead of composing `mix`/`arsenal`/`zone` by hand for the same game.
+- **Scouting reports.** A one-glance summary of a pitcher's recent form: how he's been getting outs, an arsenal breakdown, and how velocity/spin/whiff rate are trending over his last several starts. `mound outing` now covers the single-start version of this; the open part is the multi-start trend, and whether a batter-side mirror (plate discipline, chase tendencies, performance by pitch type faced) belongs alongside it.
+- **A batter-side `outing`.** `mound outing` has no `faced-` counterpart yet — a hitter's night, at-bat by at-bat, with what he was fed and how each plate appearance ended. Worth deciding first whether one game is even the right unit on the batter side, where three or four plate appearances is a thin sample for anything but a recap.
 
 ## More visualization
 

@@ -148,17 +148,16 @@ Nothing dramatic. He leaned on the slider more in the Aug. 8 blown save and less
 
 ## 5. The arsenal: swing, whiff and chase
 
-`mound arsenal` puts stuff and results in one table — velocity, spin and movement on the left, what hitters did with it on the right.
+`mound arsenal` puts usage, results and stuff in one table — how often he threw each pitch and what hitters did with it on the left, velocity, spin and movement on the right (`hb` and `ivb` are horizontal and induced vertical break).
 
 ```bash
 mound arsenal "Edwin Díaz" --last 4 --cache
 ```
 
 ```
-                    pitches  velocity  spin_rate  release_extension  horizontal_break  induced_vertical_break  whiff_rate  chase_rate
-pitch_type
-four-seam fastball       47      97.0     2337.1                7.2              13.8                    11.7        27.8        25.0
-slider                   30      90.3     2283.8                7.0               2.3                     5.3        33.3        45.0
+                    pitches  usage%  strike%  whiff%  chase%  velo  spin    hb   ivb
+four-seam fastball       47    61.0     70.2    27.8    25.0  97.0  2337  13.8  11.7
+slider                   30    39.0     63.3    33.3    45.0  90.3  2284   2.3   5.3
 ```
 
 Add swing rate — the third angle, and the one that says how often hitters were tempted at all — by composing the pieces yourself:
@@ -185,10 +184,9 @@ mound arsenal "Edwin Díaz" --game 823915 --cache
 ```
 
 ```
-                    pitches  velocity  spin_rate  release_extension  horizontal_break  induced_vertical_break  whiff_rate  chase_rate
-pitch_type
-four-seam fastball       15      96.5     2325.3                7.2              15.1                    12.1        50.0         0.0
-slider                    9      90.1     2309.2                6.9               2.1                     5.8        50.0        50.0
+                    pitches  usage%  strike%  whiff%  chase%  velo  spin    hb   ivb
+four-seam fastball       15    62.5     66.7    50.0     0.0  96.5  2325  15.1  12.1
+slider                    9    37.5     66.7    50.0    50.0  90.1  2309   2.1   5.8
 ```
 
 He missed *more* bats on Aug. 13 than usual: a 50% whiff rate on both pitches, against 27.8% and 33.3% across the four outings. The velocity is there too — 96.5 mph on the night, and 96.7 mph since coming back versus 95.7 mph before the surgery. This wasn't a night where the stuff disappeared, which makes his own explanation more plausible, not less: a pitcher missing bats who still gives up four hits is a pitcher whose mistakes were very hittable.

@@ -23,6 +23,7 @@ Mound answers questions like these with a few CLI commands or a few lines of Pyt
   - [Pitch types](#pitch-types)
 - [Working with pitches](#working-with-pitches)
   - [Games](#games)
+  - [One outing](#one-outing)
   - [Matchups](#matchups)
   - [Whiff rate, chase rate and pitch metrics](#whiff-rate-chase-rate-and-pitch-metrics)
   - [Plots](#plots)
@@ -88,6 +89,11 @@ mound results "Roki Sasaki" --last 4 --pitch splitter
 # Velocity, spin, movement, whiff and chase rate, side by side
 mound arsenal "Roki Sasaki" --game 825051
 
+# All of the above for one start, as a single report -- last night's by
+# default, or any outing by date, season or game_pk
+mound outing "Roki Sasaki"
+mound outing "Roki Sasaki" --date 2026-04-18 --out outing.png
+
 # Narrow any command to one opposing batter for a matchup view
 mound results "Roki Sasaki" --last 4 --batter "Geraldo Perdomo"
 
@@ -103,12 +109,12 @@ mound pitches "Roki Sasaki" --last 1 --ends-at-bat
 # The same question from the batter's side: every pitch he faced,
 # across every pitcher, or narrowed to one matchup
 mound faced "Shohei Ohtani" --last 5
-mound faced "Shohei Ohtani" --last 5 --pitcher "Roki Sasaki"
+mound faced "Shohei Ohtani" --last 5 --pitcher "Logan Henderson"
 mound faced-games "Shohei Ohtani" --last 5
 
 # mix/results/arsenal/zone/video all have a `faced-` counterpart, built
 # on the batter's own game log instead of a pitcher's starts
-mound faced-arsenal "Shohei Ohtani" --last 8 --pitcher "Roki Sasaki"
+mound faced-arsenal "Shohei Ohtani" --last 8 --pitcher "Logan Henderson"
 mound faced-zone "Shohei Ohtani" --last 8 --out ohtani_zone.png
 
 # Narrow to Statcast's numbered zones: 1-9 in the zone, 11-14 outside it
@@ -290,6 +296,57 @@ It returns a plain DataFrame, so the `game_pk` column feeds straight into `pitch
 roki.pitches(game=roki.games(last=4)["game_pk"].tolist())
 ```
 
+### One outing
+
+`mound outing` answers the morning-after question in one command — what happened last night — instead of running `mix`, `results` and `arsenal` against the same `--game` three times:
+
+```bash
+mound outing "Roki Sasaki"                     # the most recent start
+mound outing "Roki Sasaki" --date 2026-04-18   # a particular day
+mound outing "Roki Sasaki" --season 2025       # his last start of that season
+mound outing "Roki Sasaki" --game 825051       # an exact game_pk
+mound outing "Roki Sasaki" --out outing.png    # and the zone chart alongside it
+```
+
+```
+Yoshinobu Yamamoto · 2026-08-21 · vs Pittsburgh Pirates · game 823911
+107 pitches · 27 batters faced · innings 1-7 · 64% strikes · 70% first-pitch strikes
+
+Plate appearances
+Strikeout     9
+Groundout     6
+Single        3
+Pop Out       3
+Hit By Pitch  2
+Double        2
+Flyout        1
+Walk          1
+
+Arsenal
+                    pitches  usage%  strike%  whiff%  chase%  velo  spin    hb    ivb
+splitter                 32    29.9     75.0    38.1    55.0  90.9  1402  10.7    1.1
+four-seam fastball       28    26.2     60.7    45.5    40.0  95.7  2246   8.6   16.2
+cutter                   21    19.6     52.4    14.3     8.3  91.5  2466   3.1    8.5
+sinker                   15    14.0     60.0     0.0     0.0  95.8  2295  15.1   11.0
+curveball                 8     7.5     75.0     0.0     0.0  76.0  2696  11.4  -15.1
+slider                    3     2.8     66.7     0.0     0.0  85.7  2781   6.8    0.3
+```
+
+There's deliberately no `--last`: an outing is one game, and a window of several starts is what `mix`/`arsenal`/`zone` are already for.
+
+The arsenal table is the same one [`mound arsenal`](#whiff-rate-chase-rate-and-pitch-metrics) prints, which is what keeps the whole report to one screen. `hb` and `ivb` are horizontal and induced vertical break; that section covers the rest of the columns.
+
+Two things the report is careful about. `innings 1-6` is the innings he *appeared* in, not innings pitched — a reliever who enters with two outs still shows up in that inning, and nothing in the feed counts outs, so there's no honest way to render a box-score line. And the opponent in the headline comes from the game log, which `--game` skips (a bare `game_pk` can't be found there without guessing which season to read), so that route reports the date and the game and stops. A doubleheader is the one case where `--date` doesn't name an outing; it lists both `game_pk` values and asks you to pick.
+
+The two numbers behind the report are available on their own, on any collection:
+
+```python
+roki.pitches(game=825051).plate_appearances()      # how the at-bats ended
+roki.pitches(game=825051).first_pitch_strike_rate()
+```
+
+`plate_appearances()` reads only the pitch each at-bat ended on (see [At-bat outcomes](#at-bat-outcomes)), so filtering first narrows the question rather than the count: `filter(pitch_type="splitter").plate_appearances()` counts the at-bats that *ended* on a splitter, not every at-bat that contained one.
+
 ### Matchups
 
 Every retrieval and filter takes a `batter`, so any command or method can be scoped to one hitter. Names match on any part of the name Savant reports, ignoring case and accents — `"perdomo"` or `"Geraldo Perdomo"` both work, and an MLB player ID settles a name that's too common to be unique:
@@ -335,8 +392,9 @@ Both sides return the same pitches for a given matchup, so pick whichever player
 | `swing_rate()` | swings | every pitch |
 | `whiff_rate()` | swings that missed | swings |
 | `chase_rate()` | swings | pitches outside the zone |
+| `first_pitch_strike_rate()` | strikes on pitch one | first pitches of an at-bat |
 
-Whiff rate divides by swings rather than by every pitch, matching Baseball Savant's own convention, so a pitch rarely swung at can still post a high whiff rate on the swings it draws. Chase rate is the out-of-zone counterpart to `swing_rate()`: how often a hitter went after a pitch he could have taken for a ball. It reads location from `in_zone`, not `is_strike` ([they differ](#is_strike-vs-in_zone)), and skips pitches with no plate coordinates rather than assuming they were strikes. `pitch_metrics()` averages velocity, spin rate and movement (`horizontal_break`, `induced_vertical_break`) per pitch type.
+Whiff rate divides by swings rather than by every pitch, matching Baseball Savant's own convention, so a pitch rarely swung at can still post a high whiff rate on the swings it draws. Chase rate is the out-of-zone counterpart to `swing_rate()`: how often a hitter went after a pitch he could have taken for a ball. It reads location from `in_zone`, not `is_strike` ([they differ](#is_strike-vs-in_zone)), and skips pitches with no plate coordinates rather than assuming they were strikes. `first_pitch_strike_rate()` is split out from `strike_rate()` because pitch one mostly settles the count a pitcher works the rest of the at-bat from; it follows the at-bat rather than the collection, so narrowing to one pitch type first asks about the first pitches *of that type*. `pitch_metrics()` averages velocity, spin rate and movement (`horizontal_break`, `induced_vertical_break`) per pitch type.
 
 Compare one outing against a wider window to see what stood out:
 
@@ -351,24 +409,25 @@ last_start.pitch_metrics().loc["four-seam fastball", "spin_rate"]  # spinning it
 season.pitch_metrics().loc["four-seam fastball", "spin_rate"]
 ```
 
-The CLI's `mound arsenal` combines `pitch_metrics()`, `whiff_rate()` and `chase_rate()` into one table:
+The CLI's `mound arsenal` puts a pitcher's whole repertoire in one table — `pitch_mix()`, `strike_rate()`, `whiff_rate()`, `chase_rate()` and `pitch_metrics()`, one row per pitch type:
 
 ```bash
 mound arsenal "Roki Sasaki" --game 825051
 ```
 
 ```
-                    pitches  velocity  spin_rate  release_extension  horizontal_break  induced_vertical_break  whiff_rate  chase_rate
-pitch_type
-four-seam fastball       35      98.8     2427.1                7.1              11.2                    16.9        27.3         6.2
-splitter                 32      90.2      868.1                7.2               5.3                     1.0        13.6        57.9
-slider                   14      87.1     2099.3                7.1               3.0                     0.1        40.0        33.3
-forkball                  5      88.2      758.2                7.1               2.8                    -2.0        50.0         0.0
+                    pitches  usage%  strike%  whiff%  chase%  velo  spin    hb   ivb
+four-seam fastball       35    40.7     57.1    27.3     6.2  98.8  2427  11.2  16.9
+splitter                 32    37.2     81.2    13.6    57.9  90.2   868   5.3   1.0
+slider                   14    16.3     57.1    40.0    33.3  87.1  2099   3.0   0.1
+forkball                  5     5.8     60.0    50.0     0.0  88.2   758   2.8  -2.0
 ```
 
-The two rates read differently on purpose: the four-seamer lives in the zone (6.2% chase rate) and gets missed when hitters swing, while the splitter's whole job is to be chased below it (57.9%). A `chase_rate` of `NaN` means that pitch type never left the zone, so there was nothing to chase.
+The two rates on the right read differently on purpose: the four-seamer lives in the zone (6.2% chase rate) and gets missed when hitters swing, while the splitter's whole job is to be chased below it (57.9%).
 
-Every one of these commands has a batter-side counterpart, prefixed `faced-`, built on `Batter` instead of `Pitcher`: `mound faced-mix`, `mound faced-results`, `mound faced-arsenal`, `mound faced-zone` and `mound faced-video` ask the same questions from the hitter's side, e.g. `mound faced-arsenal "Shohei Ohtani" --last 8 --pitcher "Roki Sasaki"`.
+The column names are short so the table fits a terminal: `hb` and `ivb` are `horizontal_break` and `induced_vertical_break`, and `release_extension` is left out entirely, since it barely moves between one pitcher's own pitches. Everything at full length, extension included, is a `pitch_metrics()` call away in Python. A `-` marks a number that genuinely isn't there rather than a zero — no chase rate for a pitch type that never left the zone, no whiff rate where nobody swung, no spin or movement where the park's tracking didn't report it.
+
+Every one of these commands has a batter-side counterpart, prefixed `faced-`, built on `Batter` instead of `Pitcher`: `mound faced-mix`, `mound faced-results`, `mound faced-arsenal`, `mound faced-zone` and `mound faced-video` ask the same questions from the hitter's side, e.g. `mound faced-arsenal "Shohei Ohtani" --last 8 --pitcher "Logan Henderson"`.
 
 ### Plots
 

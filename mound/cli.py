@@ -12,6 +12,8 @@ mound results "Roki Sasaki" --last 4 --pitch splitter
 mound arsenal "Roki Sasaki" --game 825051
 mound arsenal "Roki Sasaki" --last 8 --batter "Shohei Ohtani"
 mound faced-arsenal "Shohei Ohtani" --last 8 --pitcher "Roki Sasaki"
+mound outing "Roki Sasaki"
+mound outing "Roki Sasaki" --date 2026-04-18 --out outing.png
 mound zone "Roki Sasaki" --pitch splitter --last 4 --out zone.png
 mound zone "Roki Sasaki" --last 8 --split-by stand --out zone.png
 mound zone "Roki Sasaki" --last 8 --color-by stand --out zone.png
@@ -26,6 +28,7 @@ mound video-id 7468ecb9-0918-3aca-8ef5-6396e6ab80c3
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Annotated, NoReturn
 
 import pandas as pd
@@ -224,7 +227,7 @@ def _pitch_table(collection: PitchCollection, limit: int | None) -> str:
         headline.append(f"zone {int(zones[0])}")
 
     df = full.head(limit) if limit else full
-    ended = df["ends_at_bat"].fillna(False).astype(bool)
+    ended = df["ends_at_bat"].astype("boolean").fillna(False)
 
     columns: dict[str, object] = {}
     # Several dates have to stay in the rows: they're what tells one
@@ -285,6 +288,20 @@ def _games_table(player_name: str, games: pd.DataFrame) -> str:
     return f"{headline}\n{table}"
 
 
+def _resolve_pitcher(name: str) -> Pitcher:
+    try:
+        return Pitcher(name)
+    except (PlayerNotFoundError, AmbiguousPlayerError) as exc:
+        _fail(str(exc))
+
+
+def _resolve_batter(name: str) -> Batter:
+    try:
+        return Batter(name)
+    except (PlayerNotFoundError, AmbiguousPlayerError) as exc:
+        _fail(str(exc))
+
+
 def _get_pitches(
     name: str,
     *,
@@ -301,12 +318,7 @@ def _get_pitches(
     cache: bool = False,
     cache_dir: str | None = None,
 ) -> PitchCollection:
-    try:
-        pitcher = Pitcher(name)
-    except PlayerNotFoundError as exc:
-        _fail(str(exc))
-    except AmbiguousPlayerError as exc:
-        _fail(str(exc))
+    pitcher = _resolve_pitcher(name)
 
     try:
         return pitcher.pitches(
@@ -342,12 +354,7 @@ def _get_faced_pitches(
     cache: bool = False,
     cache_dir: str | None = None,
 ) -> PitchCollection:
-    try:
-        batter = Batter(name)
-    except PlayerNotFoundError as exc:
-        _fail(str(exc))
-    except AmbiguousPlayerError as exc:
-        _fail(str(exc))
+    batter = _resolve_batter(name)
 
     try:
         return batter.pitches(
@@ -433,31 +440,93 @@ def _print_results(collection: PitchCollection) -> None:
         typer.echo(summary.to_string())
 
 
+# Columns whose decimals aren't the default one: a pitch count is a whole
+# number, and a spin rate measured to a tenth of an rpm is precision the
+# tracking doesn't have.
+_ARSENAL_DECIMALS = {"pitches": 0, "spin": 0}
+
+# A dash rather than NaN for the gaps that mean something: no chase rate
+# where a pitch type never left the zone, no whiff rate where nobody swung,
+# no spin or movement where the park's tracking didn't report it.
+_ARSENAL_MISSING = "-"
+
+
+def _arsenal_cell(value, decimals: int = 1) -> str:
+    if pd.isna(value):
+        return _ARSENAL_MISSING
+    return f"{value:.{decimals}f}"
+
+
+def _arsenal_table(collection: PitchCollection) -> pd.DataFrame:
+    """One row per pitch type: what he threw, how it played, how it moved.
+
+    Short column names and no release extension, both to keep the table
+    inside a terminal. The full-length field names live on
+    :meth:`PitchCollection.pitch_metrics`, and extension with them: it barely
+    moves between one pitcher's own pitches, so a column spends width to say
+    nothing.
+    """
+    metrics = collection.pitch_metrics()
+    table = pd.DataFrame(
+        {
+            "pitches": metrics["pitches"],
+            "usage%": collection.pitch_mix(),
+            "strike%": collection.strike_rate(by_pitch_type=True),
+            "whiff%": collection.whiff_rate(by_pitch_type=True),
+            "chase%": collection.chase_rate(by_pitch_type=True),
+            "velo": metrics["velocity"],
+            "spin": metrics["spin_rate"],
+            "hb": metrics["horizontal_break"],
+            "ivb": metrics["induced_vertical_break"],
+        }
+    )
+    # Each rate arrives sorted by its own value, so pandas aligns them into
+    # some union order; reindexing puts the busiest pitch back on top.
+    table = table.reindex(metrics.index)
+    # The pitch names are self-evident, and the index name would cost a line
+    # above the rows to say so.
+    table.index.name = None
+    return table
+
+
 def _print_arsenal(collection: PitchCollection) -> None:
-    """Shared body of `arsenal`/`faced-arsenal`."""
+    """Shared body of `arsenal`/`faced-arsenal` and the `outing` report."""
     if collection.empty:
         typer.echo("No pitches found for the given filters.")
         return
 
-    summary = collection.pitch_metrics()
-    summary["whiff_rate"] = collection.whiff_rate(by_pitch_type=True)
-    # NaN where a pitch type never landed outside the zone, which is the
-    # honest answer: there were no chances to chase it.
-    summary["chase_rate"] = collection.chase_rate(by_pitch_type=True)
-
-    with pd.option_context("display.float_format", "{:.1f}".format):
-        typer.echo(summary.to_string())
+    table = _arsenal_table(collection)
+    formatters = {
+        column: partial(_arsenal_cell, decimals=_ARSENAL_DECIMALS.get(column, 1))
+        for column in table.columns
+    }
+    # pandas' `col_space` is a minimum column width rather than a gutter, so
+    # one number for the whole table pads the narrow columns and leaves the
+    # wide ones a single space apart. Sizing each column to its own contents,
+    # plus one on top of the space pandas already puts between them, gives
+    # every gutter the same width.
+    col_space = {
+        column: max(
+            len(column),
+            max((len(formatters[column](value)) for value in table[column]), default=0),
+        )
+        + 1
+        for column in table.columns
+    }
+    # `na_rep` as well as the formatters, since pandas handles a missing value
+    # itself rather than passing it down to one.
+    typer.echo(table.to_string(formatters=formatters, na_rep=_ARSENAL_MISSING, col_space=col_space))
 
 
 def _save_zone_plot(
     collection: PitchCollection,
     *,
-    kind: str,
-    color_by: str,
-    split_by: str | None,
-    grid: bool,
-    bw_method: float | None,
     out: str,
+    kind: str = "scatter",
+    color_by: str = "pitch_type",
+    split_by: str | None = None,
+    grid: bool = False,
+    bw_method: float | None = None,
 ) -> None:
     """Shared body of `zone`/`faced-zone`."""
     if collection.empty:
@@ -477,6 +546,139 @@ def _save_zone_plot(
     except OSError as exc:
         _fail(f"Could not save plot to {out!r}: {exc.strerror or exc}")
     typer.echo(f"Saved plot of {len(collection)} pitch(es) to {out}")
+
+
+def _resolve_outing_game(
+    pitcher: Pitcher, *, game: int | None, date: str | None, season: int | None
+) -> tuple[int, pd.Series | None]:
+    """Pick the one game an `outing` report covers, plus its game-log row if known.
+
+    Everything but ``--game`` goes through the Stats API game log, which is
+    one cheap request and carries the opponent the headline names; ``--game``
+    is taken at its word, since finding a bare ``game_pk`` in a log means
+    guessing which season's log to read.
+    """
+    if game is not None:
+        return game, None
+
+    try:
+        if date is not None:
+            found = pitcher.games(since=date, until=date)
+        elif season is not None:
+            found = pitcher.games(season=season)
+        else:
+            # `last` rather than a bare current-season query, so an April
+            # question falls back to last season instead of coming up empty.
+            found = pitcher.games(last=1)
+    except Exception as exc:  # surface retrieval failures without a traceback
+        _fail(f"Failed to retrieve games for {pitcher.name}: {exc}")
+
+    if found.empty:
+        where = f" on {date}" if date else f" in {season}" if season else ""
+        _fail(f"No appearances found for {pitcher.name}{where}.")
+
+    # A doubleheader is the one case where a date doesn't name an outing.
+    if date is not None and len(found) > 1:
+        pks = ", ".join(str(pk) for pk in found["game_pk"])
+        _fail(
+            f"{pitcher.name} appeared in {len(found)} games on {date} (game_pk {pks}). "
+            "Pass --game to pick one."
+        )
+
+    row = found.iloc[-1]
+    return int(row["game_pk"]), row
+
+
+def _outing_headline(
+    pitcher: Pitcher, collection: PitchCollection, appearance: pd.Series | None
+) -> str:
+    dates = _values(collection.to_frame(), "game_date")
+    parts = [pitcher.name]
+    if dates:
+        parts.append(str(dates[0]))
+
+    opponent = appearance.get("opponent_name") if appearance is not None else None
+    if opponent:
+        is_home = appearance.get("is_home")
+        prefix = "vs" if pd.isna(is_home) or is_home else "at"
+        parts.append(f"{prefix} {opponent}")
+
+    parts.append(f"game {collection.games[0]}")
+    return " \u00b7 ".join(parts)
+
+
+def _outing_line(collection: PitchCollection) -> str:
+    """The shape of the outing in one line: how long, how many hitters, how sharp."""
+    df = collection.to_frame()
+    thrown = len(df)
+    # Keyed on the game too, so the count stays right if this is ever handed
+    # more than one: at-bat numbers restart every game.
+    faced = len(df.drop_duplicates(subset=["game_pk", "at_bat_number"]))
+
+    parts = [
+        f"{thrown} pitch{'es' if thrown != 1 else ''}",
+        f"{faced} batter{'s' if faced != 1 else ''} faced",
+    ]
+
+    innings = _values(df, "inning")
+    if innings:
+        first, last = int(innings[0]), int(innings[-1])
+        # Innings he threw in, not innings pitched: a reliever who enters
+        # with two outs still appears in that inning, and nothing in the
+        # feed counts the outs needed to turn this into a box-score line.
+        parts.append(f"inning {first}" if first == last else f"innings {first}-{last}")
+
+    for rate, label in (
+        (collection.strike_rate(), "strikes"),
+        (collection.first_pitch_strike_rate(), "first-pitch strikes"),
+    ):
+        if not pd.isna(rate):
+            parts.append(f"{rate:.0f}% {label}")
+
+    return " \u00b7 ".join(parts)
+
+
+def _print_plate_appearances(collection: PitchCollection) -> None:
+    outcomes = collection.plate_appearances()
+    if outcomes.empty:
+        typer.echo("No completed plate appearances.")
+        return
+
+    # Padded to the widest label and count actually present rather than to a
+    # fixed column, so the outcomes stay next to their numbers instead of
+    # across a gap wide enough to lose them in.
+    label_width = max(len(str(result)) for result in outcomes.index)
+    count_width = max(len(str(count)) for count in outcomes)
+    for result, count in outcomes.items():
+        typer.echo(f"{result:<{label_width}}  {count:>{count_width}}")
+
+
+def _heading(text: str) -> str:
+    # Stripped automatically when output isn't a terminal, so a piped or
+    # redirected report stays plain text.
+    return typer.style(text, bold=True)
+
+
+def _print_outing(
+    pitcher: Pitcher,
+    collection: PitchCollection,
+    appearance: pd.Series | None,
+    *,
+    out: str | None,
+) -> None:
+    """Body of `outing`: one report in the order the questions get asked."""
+    typer.echo(_heading(_outing_headline(pitcher, collection, appearance)))
+    typer.echo(_outing_line(collection))
+
+    typer.echo(f"\n{_heading('Plate appearances')}")
+    _print_plate_appearances(collection)
+
+    typer.echo(f"\n{_heading('Arsenal')}")
+    _print_arsenal(collection)
+
+    if out:
+        typer.echo("")
+        _save_zone_plot(collection, out=out)
 
 
 def _save_videos(collection: PitchCollection, *, out_dir: str, limit: int | None) -> None:
@@ -527,12 +729,7 @@ def games(
     it's the cheap way to see which games exist before pulling pitches for
     any of them. With no arguments, defaults to the current season.
     """
-    try:
-        pitcher = Pitcher(name)
-    except PlayerNotFoundError as exc:
-        _fail(str(exc))
-    except AmbiguousPlayerError as exc:
-        _fail(str(exc))
+    pitcher = _resolve_pitcher(name)
 
     try:
         found = pitcher.games(last=last, since=since, until=until, season=season)
@@ -556,12 +753,7 @@ def faced_games(
     rather than starts, and the opponent column names whichever team he
     faced that day, across however many pitchers took the mound for them.
     """
-    try:
-        batter = Batter(name)
-    except PlayerNotFoundError as exc:
-        _fail(str(exc))
-    except AmbiguousPlayerError as exc:
-        _fail(str(exc))
+    batter = _resolve_batter(name)
 
     try:
         found = batter.games(last=last, since=since, until=until, season=season)
@@ -914,6 +1106,43 @@ def faced_arsenal(
         cache_dir=cache_dir,
     )
     _print_arsenal(collection)
+
+
+@app.command()
+def outing(
+    name: str = typer.Argument(..., help="Pitcher name or MLB player ID"),
+    game: GameOption = None,
+    date: str | None = typer.Option(None, "--date", help="The outing on this date (YYYY-MM-DD)"),
+    season: SeasonOption = None,
+    out: str | None = typer.Option(
+        None, "--out", help="Also save a zone chart of the outing to this path"
+    ),
+    cache: CacheOption = False,
+    cache_dir: CacheDirOption = None,
+) -> None:
+    """Break down one outing end to end: its shape, how it ended, mix and arsenal.
+
+    Defaults to the pitcher's most recent appearance, which is the
+    morning-after question -- `mound outing "Roki Sasaki"` and nothing else.
+    Use --date for a particular day, --season for his last outing of a given
+    year, or --game for an exact game_pk.
+
+    One outing by definition, so there's no --last here: for a window of
+    several starts, compose `mound mix`, `mound arsenal` and `mound zone`,
+    which all take one.
+    """
+    pitcher = _resolve_pitcher(name)
+    game_pk, appearance = _resolve_outing_game(pitcher, game=game, date=date, season=season)
+
+    try:
+        collection = pitcher.pitches(game=game_pk, cache=cache_dir if cache_dir else cache)
+    except Exception as exc:  # surface retrieval failures without a traceback
+        _fail(f"Failed to retrieve pitches for {pitcher.name}: {exc}")
+
+    if collection.empty:
+        _fail(f"No pitches found for {pitcher.name} in game {game_pk}.")
+
+    _print_outing(pitcher, collection, appearance, out=out)
 
 
 @app.command()

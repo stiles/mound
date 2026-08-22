@@ -220,6 +220,101 @@ def test_chase_rate_empty_collection():
     assert math.isnan(PitchCollection().chase_rate())
 
 
+def test_first_pitch_strike_rate_only_counts_the_first_pitch_of_an_at_bat():
+    # Three at-bats opened, one of them with a strike; the 0-1 and 1-1
+    # pitches that follow are strikes too and shouldn't count.
+    pitches = [
+        _pitch("FF", "four-seam fastball", True, at_bat_number=1, pitch_number=1),
+        _pitch("FF", "four-seam fastball", True, at_bat_number=1, pitch_number=2),
+        _pitch("FF", "four-seam fastball", True, at_bat_number=1, pitch_number=3),
+        _pitch("SL", "slider", False, at_bat_number=2, pitch_number=1),
+        _pitch("SL", "slider", False, at_bat_number=3, pitch_number=1),
+    ]
+    collection = PitchCollection(pitches)
+
+    assert collection.first_pitch_strike_rate() == pytest.approx(33.3, abs=0.1)
+    assert collection.strike_rate() == 60.0
+
+
+def test_first_pitch_strike_rate_by_pitch_type():
+    pitches = [
+        _pitch("FF", "four-seam fastball", True, at_bat_number=1, pitch_number=1),
+        _pitch("FF", "four-seam fastball", False, at_bat_number=2, pitch_number=1),
+        _pitch("SL", "slider", True, at_bat_number=3, pitch_number=1),
+    ]
+    collection = PitchCollection(pitches)
+
+    rates = collection.first_pitch_strike_rate(by_pitch_type=True)
+
+    assert rates["four-seam fastball"] == 50.0
+    assert rates["slider"] == 100.0
+
+
+def test_first_pitch_strike_rate_with_no_first_pitches_is_nan():
+    import math
+
+    # A filter can leave a collection with nothing but 1-2 counts in it.
+    pitches = [_pitch("FS", "splitter", True, at_bat_number=1, pitch_number=3)]
+
+    assert math.isnan(PitchCollection(pitches).first_pitch_strike_rate())
+
+
+def test_first_pitch_strike_rate_empty_collection():
+    import math
+
+    assert math.isnan(PitchCollection().first_pitch_strike_rate())
+
+
+def test_plate_appearances_counts_each_at_bat_once():
+    # Savant stamps the result on every pitch of the at-bat, so a three-pitch
+    # strikeout has to count once, not three times.
+    pitches = [
+        _pitch("FF", "four-seam fastball", True, at_bat_number=1, at_bat_result="Strikeout"),
+        _pitch("FS", "splitter", True, at_bat_number=1, at_bat_result="Strikeout"),
+        _pitch(
+            "FS",
+            "splitter",
+            True,
+            at_bat_number=1,
+            at_bat_result="Strikeout",
+            ends_at_bat=True,
+        ),
+        _pitch("SL", "slider", False, at_bat_number=2, at_bat_result="Walk", ends_at_bat=True),
+    ]
+    collection = PitchCollection(pitches)
+
+    outcomes = collection.plate_appearances()
+
+    assert outcomes["Strikeout"] == 1
+    assert outcomes["Walk"] == 1
+    assert outcomes.sum() == 2
+
+
+def test_plate_appearances_ignores_an_at_bat_still_being_pitched():
+    # Nothing marks an unfinished at-bat's last pitch, so it has no ending
+    # to count -- and no result stamped on it either.
+    pitches = [
+        _pitch("FF", "four-seam fastball", True, at_bat_number=1, at_bat_result="Flyout"),
+        _pitch(
+            "FF",
+            "four-seam fastball",
+            True,
+            at_bat_number=1,
+            at_bat_result="Flyout",
+            ends_at_bat=True,
+        ),
+        _pitch("SL", "slider", False, at_bat_number=2, at_bat_result=None),
+    ]
+
+    outcomes = PitchCollection(pitches).plate_appearances()
+
+    assert outcomes.to_dict() == {"Flyout": 1}
+
+
+def test_plate_appearances_empty_collection():
+    assert PitchCollection().plate_appearances().empty
+
+
 def test_pitch_metrics_by_pitch_type():
     pitches = [
         _pitch(

@@ -1,9 +1,9 @@
 """Pitch usage and outcome calculations.
 
-Kept intentionally small -- mix, strike rate, swing/whiff/chase rate and
-pitch shape -- but structured so additional Statcast metrics (exit velocity,
-expected outcomes, etc.) can be added as more functions over the same
-:class:`~mound.pitches.PitchCollection` shape.
+Kept intentionally small -- mix, strike rate, swing/whiff/chase rate, pitch
+shape and how plate appearances ended -- but structured so additional
+Statcast metrics (exit velocity, expected outcomes, etc.) can be added as
+more functions over the same :class:`~mound.pitches.PitchCollection` shape.
 """
 
 from __future__ import annotations
@@ -55,6 +55,72 @@ def strike_rate(collection: PitchCollection, by_pitch_type: bool = False) -> flo
     return round(df["is_strike"].mean() * 100, 1)
 
 
+def first_pitch_strike_rate(
+    collection: PitchCollection, by_pitch_type: bool = False
+) -> float | pd.Series:
+    """Strike rate on the first pitch of a plate appearance.
+
+    Broken out from :func:`strike_rate` because the count a pitcher spends
+    the rest of an at-bat working from is largely settled here: 0-1 and 1-0
+    lead to different pitches, and a starter who can't get pitch one over
+    tends to run up a pitch count regardless of how his stuff looks.
+
+    Counted from ``pitch_number``, so it follows the at-bat rather than the
+    collection -- narrowing to one pitch type first gives the strike rate on
+    the first pitches *of that type*, which is only the same question if he
+    opened every hitter with it.
+    """
+    df = collection.to_frame()
+    if not df.empty:
+        df = df[df["pitch_number"] == 1]
+
+    if df.empty:
+        return (
+            pd.Series(dtype=float, name="first_pitch_strike_rate")
+            if by_pitch_type
+            else float("nan")
+        )
+
+    if by_pitch_type:
+        rates = df.groupby("pitch_type")["is_strike"].mean() * 100
+        rates = rates.round(1).sort_values(ascending=False)
+        rates.name = "first_pitch_strike_rate"
+        return rates
+
+    return round(df["is_strike"].mean() * 100, 1)
+
+
+def plate_appearances(collection: PitchCollection) -> pd.Series:
+    """How the plate appearances in this collection ended, counted by result.
+
+        >>> roki.pitches(game=825051).plate_appearances()
+        at_bat_result
+        Strikeout    8
+        Groundout    5
+        Walk         2
+        ...
+
+    Read only from the pitch each at-bat ended on, since Savant stamps
+    ``at_bat_result`` onto every pitch of the at-bat -- counting every row
+    would score a five-pitch strikeout five times. So this follows
+    ``ends_at_bat`` and inherits its edges: an at-bat still being pitched has
+    no ending to count, and an at-bat whose final pitch an earlier filter
+    removed drops out entirely, which is what makes a pitch-type-filtered
+    count a narrower question than it looks.
+    """
+    df = collection.to_frame()
+    if not df.empty:
+        df = df[df["ends_at_bat"].astype("boolean").fillna(False)]
+
+    if df.empty:
+        return pd.Series(dtype=int, name="plate_appearances")
+
+    counts = df["at_bat_result"].dropna().value_counts()
+    counts.name = "plate_appearances"
+    counts.index.name = "at_bat_result"
+    return counts
+
+
 def swing_rate(collection: PitchCollection, by_pitch_type: bool = False) -> float | pd.Series:
     """Swing rate (percentage of pitches the batter swung at, contact or miss).
 
@@ -84,7 +150,7 @@ def whiff_rate(collection: PitchCollection, by_pitch_type: bool = False) -> floa
     """
     df = collection.to_frame()
     if not df.empty:
-        df = df[df["is_swing"].fillna(False).astype(bool)]
+        df = df[df["is_swing"].astype("boolean").fillna(False)]
 
     if df.empty:
         return pd.Series(dtype=float, name="whiff_rate") if by_pitch_type else float("nan")

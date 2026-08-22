@@ -13,6 +13,7 @@ import {
   features,
   heroCommand,
   heroOutput,
+  outing,
   plots,
   questions,
   splitPlot,
@@ -30,6 +31,7 @@ export default function Home() {
         <Questions />
         <Features />
         <Arsenal />
+        <Outing />
         <Plots />
         <Clips />
         <GetStarted />
@@ -134,8 +136,9 @@ function Features() {
         A small surface, pointed at one job.
       </h2>
       <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted">
-        Eight commands and one Python object, sharing the same implementation
-        underneath. Anything you can do in the shell, you can also do in a script.
+        Ten commands, seven of them mirrored on the batter&rsquo;s side, over two
+        Python objects that share the same implementation underneath. Anything
+        you can do in the shell, you can also do in a script.
       </p>
 
       <div className="mt-14 grid gap-px overflow-hidden rounded-xl border border-ink/12 bg-ink/12 sm:grid-cols-2 lg:grid-cols-4">
@@ -217,7 +220,7 @@ function Arsenal() {
                         {row.velocity.toFixed(1)}
                       </td>
                       <td className="hidden py-3.5 pl-3 text-right font-mono tabular-nums text-muted sm:table-cell">
-                        {row.spin.toFixed(1)}
+                        {row.spin.toFixed(0)}
                       </td>
                       <td className="py-3.5 pl-3 text-right font-mono tabular-nums text-ink">
                         {row.whiff.toFixed(1)}%
@@ -258,6 +261,73 @@ function Arsenal() {
                 </dd>
               </div>
             </dl>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Outing() {
+  return (
+    <section className="border-y border-ink/10 bg-paper-warm">
+      <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-28">
+        <h2 className="max-w-3xl text-section font-semibold text-balance">
+          The morning after, in one command.
+        </h2>
+        <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted">
+          One start is the unit people actually ask about.{" "}
+          <code className="font-mono text-base text-grass-700">mound outing</code>{" "}
+          reports the whole thing — the shape of the outing, how every plate
+          appearance ended, and the arsenal table — instead of running{" "}
+          <code className="font-mono text-base text-grass-700">mix</code>,{" "}
+          <code className="font-mono text-base text-grass-700">results</code> and{" "}
+          <code className="font-mono text-base text-grass-700">arsenal</code>{" "}
+          against the same game three times.
+        </p>
+
+        <Terminal
+          command={outing.command}
+          output={outing.output}
+          animate={false}
+          className="mt-10"
+        />
+
+        <div className="mt-10 grid gap-12 lg:grid-cols-[1fr_1fr] lg:gap-20">
+          <dl className="space-y-5">
+            {outing.selectors.map((selector) => (
+              <div key={selector.code}>
+                <dt className="font-mono text-xs text-grass-700">
+                  {selector.code}
+                </dt>
+                <dd className="mt-1.5 text-sm leading-relaxed text-muted">
+                  {selector.body}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          <div className="space-y-5 border-l-2 border-seam pl-6">
+            <p className="text-sm leading-relaxed text-muted">
+              <span className="font-semibold text-ink">
+                What the innings mean.
+              </span>{" "}
+              <code className="font-mono text-grass-700">innings 1-7</code> is
+              the innings he appeared in, not innings pitched. A reliever who
+              enters with two outs still shows up in that inning, and nothing in
+              the feed counts outs, so there&rsquo;s no honest way to print a
+              box-score line.
+            </p>
+            <p className="text-sm leading-relaxed text-muted">
+              <span className="font-semibold text-ink">
+                And no <code className="font-mono">--last</code>.
+              </span>{" "}
+              An outing is one game. A window of several starts is what{" "}
+              <code className="font-mono text-grass-700">mix</code>,{" "}
+              <code className="font-mono text-grass-700">arsenal</code> and{" "}
+              <code className="font-mono text-grass-700">zone</code> are already
+              for.
+            </p>
           </div>
         </div>
       </div>

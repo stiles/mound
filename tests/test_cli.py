@@ -7,11 +7,18 @@ column layout included -- rather than only the collection underneath it.
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from typer.testing import CliRunner
 
 from mound.cli import app
-from tests.conftest import register_game_log, register_gf, register_person
+from tests.conftest import (
+    register_game_log,
+    register_gf,
+    register_gf_payload,
+    register_person,
+)
 
 
 @pytest.fixture
@@ -283,6 +290,41 @@ def test_faced_results_breaks_down_by_pitch_type(mocked_responses, runner):
     assert "slider" in result.stdout
 
 
+def test_arsenal_puts_usage_results_and_shape_on_one_row(mocked_responses, runner):
+    _register_game_1001(mocked_responses)
+
+    result = runner.invoke(app, ["arsenal", "808963", "--game", "1001"])
+    header = next(line for line in result.stdout.splitlines() if "usage%" in line)
+
+    assert result.exit_code == 0
+    assert header.split() == [
+        "pitches",
+        "usage%",
+        "strike%",
+        "whiff%",
+        "chase%",
+        "velo",
+        "spin",
+        "hb",
+        "ivb",
+    ]
+    # Narrow enough to read in a terminal, which is the point of the short
+    # names and of leaving release extension out.
+    assert max(len(line) for line in result.stdout.splitlines()) < 90
+
+
+def test_arsenal_marks_a_missing_number_rather_than_printing_nan(mocked_responses, runner):
+    # Only the fixture's first pitch carries spin and movement, so the
+    # splitter and slider rows have nothing to average.
+    _register_game_1001(mocked_responses)
+
+    result = runner.invoke(app, ["arsenal", "808963", "--game", "1001"])
+
+    assert result.exit_code == 0
+    assert "NaN" not in result.stdout
+    assert " - " in result.stdout
+
+
 def test_faced_arsenal_scopes_to_one_pitcher(mocked_responses, runner):
     register_person(mocked_responses, 500001, "people_500001.json")
     register_gf(mocked_responses, 1004, "gf_game_1004.json")
@@ -292,8 +334,8 @@ def test_faced_arsenal_scopes_to_one_pitcher(mocked_responses, runner):
     )
 
     assert result.exit_code == 0
-    assert "whiff_rate" in result.stdout
-    assert "chase_rate" in result.stdout
+    assert "whiff%" in result.stdout
+    assert "chase%" in result.stdout
 
 
 def test_faced_zone_writes_a_plot(mocked_responses, runner, tmp_path):
@@ -305,6 +347,139 @@ def test_faced_zone_writes_a_plot(mocked_responses, runner, tmp_path):
 
     assert result.exit_code == 0
     assert out.exists()
+
+
+def test_outing_breaks_one_start_down_end_to_end(mocked_responses, runner):
+    _register_game_1001(mocked_responses)
+
+    result = runner.invoke(app, ["outing", "808963", "--game", "1001"])
+
+    assert result.exit_code == 0
+    # 5 pitches over 2 at-bats in the 1st, 3 of them strikes, and both
+    # at-bats opened with one.
+    assert _headline(result) == "Roki Sasaki · 2025-07-10 · game 1001"
+    assert result.stdout.splitlines()[1] == (
+        "5 pitches · 2 batters faced · inning 1 · 60% strikes · 100% first-pitch strikes"
+    )
+    assert "Plate appearances" in result.stdout
+    assert "Arsenal" in result.stdout
+
+
+def test_outing_carries_one_table_per_pitch_type(mocked_responses, runner):
+    _register_game_1001(mocked_responses)
+
+    result = runner.invoke(app, ["outing", "808963", "--game", "1001"])
+
+    assert result.exit_code == 0
+    # What he threw, how it played and how it moved on one row, rather than a
+    # mix table and an arsenal table keyed on the same pitch types.
+    assert result.stdout.count("usage%") == 1
+    assert result.stdout.count("splitter") == 1
+
+
+def test_outing_counts_each_plate_appearance_once(mocked_responses, runner):
+    # The feed repeats "Strikeout" on all three pitches of the at-bat.
+    _register_game_1001(mocked_responses)
+
+    result = runner.invoke(app, ["outing", "808963", "--game", "1001"])
+
+    assert result.exit_code == 0
+    assert result.stdout.count("Strikeout") == 1
+    assert result.stdout.count("Walk") == 1
+
+
+def test_outing_by_date_names_the_opponent(mocked_responses, runner):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_2025.json", season=2025)
+    register_gf(mocked_responses, 1001, "gf_game_1001.json")
+
+    result = runner.invoke(app, ["outing", "808963", "--date", "2025-07-10"])
+
+    assert result.exit_code == 0
+    assert _headline(result) == "Roki Sasaki · 2025-07-10 · vs Arizona Diamondbacks · game 1001"
+
+
+def test_outing_says_at_rather_than_vs_for_a_road_start(mocked_responses, runner):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_2025.json", season=2025)
+    register_gf(mocked_responses, 1002, "gf_game_1002.json")
+
+    result = runner.invoke(app, ["outing", "808963", "--date", "2025-08-01"])
+
+    assert result.exit_code == 0
+    assert "at San Francisco Giants" in _headline(result)
+
+
+def test_outing_season_picks_the_last_start_of_that_year(mocked_responses, runner):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_2025.json", season=2025)
+    register_gf(mocked_responses, 1003, "gf_game_1003.json")
+
+    result = runner.invoke(app, ["outing", "808963", "--season", "2025"])
+
+    assert result.exit_code == 0
+    assert _headline(result).endswith("game 1003")
+
+
+def test_outing_defaults_to_the_most_recent_appearance(mocked_responses, runner):
+    # With nothing selected, the game log falls back through prior seasons
+    # rather than coming up empty on a year that hasn't started yet.
+    this_year = date.today().year
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_empty.json", season=this_year)
+    register_game_log(mocked_responses, 808963, "game_log_2025.json", season=this_year - 1)
+    register_gf(mocked_responses, 1003, "gf_game_1003.json")
+
+    result = runner.invoke(app, ["outing", "808963"])
+
+    assert result.exit_code == 0
+    assert _headline(result).endswith("game 1003")
+
+
+def test_outing_asks_which_half_of_a_doubleheader(mocked_responses, runner):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_doubleheader.json", season=2025)
+
+    result = runner.invoke(app, ["outing", "808963", "--date", "2025-08-15"])
+
+    assert result.exit_code == 1
+    assert "game_pk 1003, 1005" in result.stderr
+    assert "--game" in result.stderr
+
+
+def test_outing_reports_a_season_with_no_appearances(mocked_responses, runner):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_game_log(mocked_responses, 808963, "game_log_empty.json", season=2024)
+
+    result = runner.invoke(app, ["outing", "808963", "--season", "2024"])
+
+    assert result.exit_code == 1
+    assert "No appearances found for Roki Sasaki in 2024." in result.stderr
+
+
+def test_outing_reports_a_game_the_pitcher_never_appeared_in(mocked_responses, runner):
+    register_person(mocked_responses, 808963, "people_808963.json")
+    register_gf_payload(
+        mocked_responses,
+        1009,
+        {"game_status_code": "F", "game_date": "2025-09-01", "home_pitchers": {}},
+    )
+
+    result = runner.invoke(app, ["outing", "808963", "--game", "1009"])
+
+    assert result.exit_code == 1
+    assert "No pitches found for Roki Sasaki in game 1009." in result.stderr
+
+
+def test_outing_saves_a_zone_chart_when_asked(mocked_responses, runner, tmp_path):
+    _register_game_1001(mocked_responses)
+    out = tmp_path / "outing.png"
+
+    result = runner.invoke(app, ["outing", "808963", "--game", "1001", "--out", str(out)])
+
+    assert result.exit_code == 0
+    assert out.exists()
+    assert "Arsenal" in result.stdout  # the report still prints alongside it
 
 
 def test_pitches_reports_no_matches_without_failing(mocked_responses, runner):
