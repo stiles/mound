@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 Format based on Keep a Changelog.
 
+## [Unreleased]
+
+### Added
+
+- The README is published at moundcli.com/docs rather than only linked to on GitHub, rendered from the same file the package ships to PyPI so the page and the installed version can't disagree about what a command does. The site's "Read the docs" button used to hand the reader to GitHub's UI one click after the landing page, and none of the prose that would answer a search for "chase rate vs whiff rate" lived on the site's own domain.
+- Inline code in the site's hand-written prose gets the same tinted treatment the rendered markdown already had, through a shared `.code-inline` class. A flag or command name set in bare green monospace at body size was hard to pick out of a sentence, which is the whole job of marking it as code.
+- Repo-relative links in synced markdown now resolve to site routes where the site hosts the file: `README.md` to `/docs`, `CHANGELOG.md` to `/changelog`, and `docs/examples/<name>.md` to `/examples/<name>`, each keeping its anchor. So the Díaz walkthrough's link into the arsenal section lands on `/docs#whiff-rate-chase-rate-and-pitch-metrics` instead of leaving the site mid-sentence. Anything the site doesn't host still falls back to GitHub, which is what `ROADMAP.md` does, deliberately -- a roadmap on a product site reads as a promise.
+
 ## [0.12.0] - 2026-08-22
 
 ### Added

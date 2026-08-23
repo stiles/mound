@@ -12,11 +12,26 @@ import type { Element, Root } from "hast";
 import { moundDark } from "@/lib/code-theme";
 import { site } from "@/lib/site";
 
+/** Repo files the site now renders itself, so a relative link to one can stay
+ *  here instead of bouncing the reader to GitHub. ROADMAP.md is deliberately
+ *  absent: it's a contributor document, and a roadmap on a product site reads
+ *  as a promise. */
+const HOSTED: Record<string, string> = {
+  "README.md": "/docs",
+  "CHANGELOG.md": "/changelog",
+};
+
+function hostedRoute(file: string): string | null {
+  if (file in HOSTED) return HOSTED[file];
+  const example = /^docs\/examples\/(.+)\.md$/.exec(file);
+  return example ? `/examples/${example[1]}` : null;
+}
+
 /**
  * The source files live in the repo and link to each other with relative
  * paths that only resolve on GitHub. Rewrite them for the web: images point
- * at the synced public directory, and links to files the site doesn't host
- * yet fall back to GitHub rather than 404.
+ * at the synced public directory, links to pages the site hosts become site
+ * routes, and anything else falls back to GitHub rather than 404.
  */
 function rewriteRepoPaths() {
   return (tree: Root) => {
@@ -41,10 +56,16 @@ function rewriteRepoPaths() {
           return;
         }
 
-        // e.g. "../../README.md#caching" -> the README anchor on GitHub
+        // e.g. "../../README.md#caching" -> "/docs#caching"
         const [path, hash] = href.split("#");
         const file = path.replace(/^(\.\.\/)+/, "").replace(/^\.\//, "");
         const anchor = hash ? `#${hash}` : "";
+        const hosted = file ? hostedRoute(file) : null;
+
+        if (hosted) {
+          node.properties.href = `${hosted}${anchor}`;
+          return;
+        }
 
         node.properties.href = file
           ? `${site.repo}/blob/main/${file}${anchor}`

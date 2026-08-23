@@ -277,12 +277,12 @@ function Outing() {
         </h2>
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted">
           One start is the unit people actually ask about.{" "}
-          <code className="font-mono text-base text-grass-700">mound outing</code>{" "}
+          <code className="code-inline">mound outing</code>{" "}
           reports the whole thing — the shape of the outing, how every plate
           appearance ended, and the arsenal table — instead of running{" "}
-          <code className="font-mono text-base text-grass-700">mix</code>,{" "}
-          <code className="font-mono text-base text-grass-700">results</code> and{" "}
-          <code className="font-mono text-base text-grass-700">arsenal</code>{" "}
+          <code className="code-inline">mix</code>,{" "}
+          <code className="code-inline">results</code> and{" "}
+          <code className="code-inline">arsenal</code>{" "}
           against the same game three times.
         </p>
 
@@ -312,7 +312,7 @@ function Outing() {
               <span className="font-semibold text-ink">
                 What the innings mean.
               </span>{" "}
-              <code className="font-mono text-grass-700">innings 1-7</code> is
+              <code className="code-inline">innings 1-7</code> is
               the innings he appeared in, not innings pitched. A reliever who
               enters with two outs still shows up in that inning, and nothing in
               the feed counts outs, so there&rsquo;s no honest way to print a
@@ -320,12 +320,12 @@ function Outing() {
             </p>
             <p className="text-sm leading-relaxed text-muted">
               <span className="font-semibold text-ink">
-                And no <code className="font-mono">--last</code>.
+                And no <code className="code-inline">--last</code>.
               </span>{" "}
               An outing is one game. A window of several starts is what{" "}
-              <code className="font-mono text-grass-700">mix</code>,{" "}
-              <code className="font-mono text-grass-700">arsenal</code> and{" "}
-              <code className="font-mono text-grass-700">zone</code> are already
+              <code className="code-inline">mix</code>,{" "}
+              <code className="code-inline">arsenal</code> and{" "}
+              <code className="code-inline">zone</code> are already
               for.
             </p>
           </div>
@@ -404,7 +404,7 @@ function Clips() {
         </h2>
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted">
           Every pitch carries a{" "}
-          <code className="font-mono text-base text-grass-700">pitch_id</code>{" "}
+          <code className="code-inline">pitch_id</code>{" "}
           that doubles as the play ID on a Baseball Savant clip page. Any pitch
           you can filter to is a pitch you can download.
         </p>
@@ -471,11 +471,11 @@ function GetStarted() {
             <CopyCommand command='mound arsenal "Roki Sasaki" --last 4' />
             <p className="pt-3 text-sm leading-relaxed text-grass-900/60">
               Add{" "}
-              <code className="font-mono text-grass-800">
+              <code className="code-inline">
                 pip install &quot;mound[viz]&quot;
               </code>{" "}
               for KDE heatmaps, or{" "}
-              <code className="font-mono text-grass-800">
+              <code className="code-inline">
                 &quot;mound[parquet]&quot;
               </code>{" "}
               for Parquet export.

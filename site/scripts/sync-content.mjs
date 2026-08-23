@@ -17,7 +17,10 @@ import { fileURLToPath } from "node:url";
 const siteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(siteRoot, "..");
 
-const CHANGELOG = { from: join(repoRoot, "CHANGELOG.md"), to: join(siteRoot, "content/changelog.md") };
+const FILES = [
+  { from: join(repoRoot, "CHANGELOG.md"), to: join(siteRoot, "content/changelog.md") },
+  { from: join(repoRoot, "README.md"), to: join(siteRoot, "content/docs.md") },
+];
 const EXAMPLES = { from: join(repoRoot, "docs/examples"), to: join(siteRoot, "content/examples"), ext: ".md" };
 const IMAGES = { from: join(repoRoot, "docs/images"), to: join(siteRoot, "public/docs-images"), ext: ".png" };
 
@@ -46,16 +49,20 @@ async function syncDirectory({ from, to, ext }) {
 }
 
 async function main() {
-  if (!(await exists(CHANGELOG.from))) {
-    throw new Error(`Missing source file: ${CHANGELOG.from}`);
+  for (const file of FILES) {
+    if (!(await exists(file.from))) {
+      throw new Error(`Missing source file: ${file.from}`);
+    }
+    await mkdir(dirname(file.to), { recursive: true });
+    await copyFile(file.from, file.to);
   }
-  await mkdir(dirname(CHANGELOG.to), { recursive: true });
-  await copyFile(CHANGELOG.from, CHANGELOG.to);
 
   const examples = await syncDirectory(EXAMPLES);
   const images = await syncDirectory(IMAGES);
 
-  console.log(`synced changelog.md, ${examples} example(s), ${images} image(s)`);
+  console.log(
+    `synced changelog.md, docs.md, ${examples} example(s), ${images} image(s)`,
+  );
 }
 
 main().catch((error) => {

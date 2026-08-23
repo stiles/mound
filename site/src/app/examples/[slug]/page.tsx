@@ -57,9 +57,9 @@ export default async function ExamplePage({
             <h2 className="font-semibold text-ink">Run it yourself</h2>
             <p className="mt-2 text-sm leading-relaxed text-grass-900/70">
               This walkthrough lives in the repo as{" "}
-              <code className="font-mono">docs/examples/{example.slug}.md</code>
+              <code className="code-inline">docs/examples/{example.slug}.md</code>
               , with a runnable companion script in{" "}
-              <code className="font-mono">examples/</code>.
+              <code className="code-inline">examples/</code>.
             </p>
             <a
               href={`${site.repo}/blob/main/docs/examples/${example.slug}.md`}

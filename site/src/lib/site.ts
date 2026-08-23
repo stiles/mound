@@ -6,7 +6,7 @@ export const site = {
     "A CLI and Python toolkit for retrieving, analyzing and visualizing MLB pitch-level data — without needing to know MLB player IDs or the underlying API structures.",
   repo: "https://github.com/stiles/mound",
   pypi: "https://pypi.org/project/mound/",
-  docs: "https://github.com/stiles/mound#readme",
+  docs: "/docs",
   examples: "/examples",
   changelog: "/changelog",
   author: "Matt Stiles",

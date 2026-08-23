@@ -136,9 +136,13 @@ body {
   line-height: 1.75;
 }
 
-/* Changelog entries name a lot of flags and functions, so inline code stays
-   a neutral tint — green here would out-shout the links and the brand. */
-.prose-mound :not(pre) > code {
+/* Inline code, in rendered markdown and in the hand-written prose on the
+   landing page alike — .code-inline is the same treatment for a <code> that
+   isn't inside .prose-mound. Stays a neutral tint: green out-shouts the links
+   and the brand, and a bare mono span at body size is hard to pick out of a
+   sentence at all. */
+.prose-mound :not(pre) > code,
+.code-inline {
   /* The negative margin cancels the padding's optical gap, so a comma after
      a code span sits where a comma should rather than a space away. */
   padding: 0.12em 0.32em;

@@ -9,11 +9,14 @@ export type Release = {
   body: string;
 };
 
-export type Example = {
-  slug: string;
+export type Titled = {
   title: string;
   summary: string;
   body: string;
+};
+
+export type Example = Titled & {
+  slug: string;
 };
 
 const RELEASE_HEADING = /^##\s+\[([^\]]+)\]\s*[-–]\s*(.+?)\s*$/;
@@ -64,22 +67,34 @@ function smarten(text: string): string {
     .replace(/ -- /g, " \u2014 ");
 }
 
-function parseExample(slug: string, source: string): Example {
+/** Splits a leading `# Title` and the first paragraph under it off the body.
+ *  Every page here renders both itself, so they'd otherwise appear twice. */
+function parseTitled(source: string): Titled {
   const lines = source.split("\n");
   const titleIndex = lines.findIndex((line) => line.startsWith("# "));
-  const title = titleIndex >= 0 ? lines[titleIndex].replace(/^#\s+/, "").trim() : slug;
+  const title = titleIndex >= 0 ? lines[titleIndex].replace(/^#\s+/, "").trim() : "";
 
   const rest = lines.slice(titleIndex + 1);
   const summaryIndex = rest.findIndex((line) => line.trim().length > 0);
   const summary = summaryIndex >= 0 ? rest[summaryIndex].trim() : "";
 
   return {
-    slug,
     title: smarten(title),
     summary: smarten(summary),
-    // The page renders its own title and standfirst, so drop them from the body.
     body: rest.slice(summaryIndex + 1).join("\n").trim(),
   };
+}
+
+function parseExample(slug: string, source: string): Example {
+  const parsed = parseTitled(source);
+  return { slug, ...parsed, title: parsed.title || slug };
+}
+
+/** README.md, synced in as docs.md. The repo's README is the reference
+ *  documentation, so the site renders that same file rather than keeping a
+ *  second copy of it that can drift. */
+export async function getDoc(): Promise<Titled> {
+  return parseTitled(await readFile(join(CONTENT, "docs.md"), "utf8"));
 }
 
 export async function getExamples(): Promise<Example[]> {

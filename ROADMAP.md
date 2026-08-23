@@ -38,7 +38,6 @@ Sensible next steps beyond the initial prototype, roughly grouped by theme. None
 
 ## Docs
 
-- **Revamp doc structure where needed.** The README reads more like a chronological feature log than a reference; worth restructuring around how someone actually looks things up, not the order features shipped in.
 - **Rethink entry points for first-time users.** What does someone reach for on their very first command or import, before they know any of this exists? Worth designing the Quickstart around that path rather than an exhaustive option list.
-- **Docs on the site, not just the README.** `site/content` mirrors the README and CHANGELOG today; publish more of the documentation (this roadmap, worked walkthroughs) directly on moundcli.com instead of only linking back to the repo.
+- **Split the docs page into sections.** moundcli.com/docs now renders the README, but as one 600-line page whose only navigation is the table of contents it inherited. Splitting it into a route per section with a persistent sidebar is the next step. The open question is whether the README stays the single source once it does: one file per section reads better on the web and worse in a repo, where the README is the first thing anyone opens.
 - **More worked examples.** Candidates: Alex Vesia's recent struggles (is his spin rate down, is it a location issue?); a season-overview example naming Roki Sasaki's "best" outing so far; why Chris Sale is still this good.
