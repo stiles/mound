@@ -492,11 +492,11 @@ def _style_axes(ax: Axes) -> None:
     ax.set_ylabel("")
 
 
-def _draw_legend_key(ax: Axes, column: str, values: list) -> None:
+def _draw_legend_key(ax: Axes, column: str, values: list, top: float = 0.97) -> None:
     # A halo (rather than a boxed/framed legend) keeps the key legible over
     # dense clusters of points without adding a hard-edged UI element.
     halo = [path_effects.withStroke(linewidth=3, foreground=BACKGROUND)]
-    y = 0.97
+    y = top
     for value in values:
         text = ax.text(
             0.04,
@@ -818,3 +818,201 @@ def _plot_zone_faceted(
             fig.savefig(out, dpi=200, bbox_inches="tight", pad_inches=0.2)
 
     return axes
+
+
+# -- tunnel plots ---------------------------------------------------------
+
+# Where the flight path stops being drawn as one line and starts being drawn
+# as two. Marking the commit point is what makes a tunnel legible: without
+# it, two curves that separate somewhere don't say whether the separation
+# arrived in time to be acted on.
+_COMMIT_MARKER_SIZE = 46
+_PLATE_MARKER_SIZE = 92
+
+# A tunnel plot has to hold the release point as well as the plate, and a
+# release is a foot and a half above where `plot_zone` stops. The wider
+# frame costs the strike zone some size, which is the right trade here --
+# the zone is context in this chart, not its subject.
+TUNNEL_Z_RANGE = (-0.5, 7.0)
+
+
+def _tunnel_pair(collection: PitchCollection):
+    """The two pitches a tunnel plot should draw, and why they were chosen."""
+    pitches = [p for p in collection if p.trajectory() is not None]
+    if len(pitches) == 2:
+        return pitches[0], pitches[1], False
+    if len(pitches) < 2:
+        raise ValueError(
+            "plot_tunnel needs two pitches with trajectory data; "
+            f"this collection has {len(pitches)}"
+        )
+
+    ranked = collection.tunnels()
+    if ranked.empty:
+        raise ValueError(
+            "plot_tunnel found no comparable pitch pair -- filter to two pitches, "
+            "or check that this collection spans an at-bat with more than one pitch type"
+        )
+
+    top = ranked.iloc[0]
+    by_key = {(p.game_pk, p.at_bat_number, p.pitch_number): p for p in pitches}
+    first = by_key[(top["game_pk"], top["at_bat_number"], top["first_pitch"])]
+    second = by_key[(top["game_pk"], top["at_bat_number"], top["second_pitch"])]
+    return first, second, True
+
+
+def _tunnel_headline(first, second) -> str:
+    who = first.pitcher_name or "Pitch"
+    return f"{who}: {first.pitch_type} and {second.pitch_type}"
+
+
+def _tunnel_subtitle(first, second, commit_sep, plate_sep, commit_distance) -> str:
+    parts = []
+    if first.batter_name:
+        parts.append(f"vs. {first.batter_name}")
+    if first.game_date:
+        parts.append(_format_date(date.fromisoformat(first.game_date)))
+    parts.append(
+        f"{commit_sep:.0f}\u2033 apart at {commit_distance:g} ft, "
+        f"{plate_sep:.0f}\u2033 at the plate"
+    )
+    return " \u00b7 ".join(parts)
+
+
+def plot_tunnel(
+    collection: PitchCollection,
+    *,
+    commit_distance: float | None = None,
+    commit_time: float | None = None,
+    ax: Axes | None = None,
+    title: str | None = None,
+    subtitle: str | None = None,
+    source: str = "Source: MLB Statcast (Baseball Savant), via Mound",
+    out: str | None = None,
+) -> Axes:
+    """Draw two pitches' flight paths as the hitter sees them.
+
+    Both paths are projected onto the plane the hitter looks down, so two
+    pitches that tunnel trace nearly the same line until they don't. An open
+    marker on each sits at the commit point -- the moment the swing decision
+    has to be made -- and a filled one at the plate, which is the whole
+    argument in two dots: how close together they were when he had to choose,
+    and how far apart they finished.
+
+    Pass a collection of exactly two pitches to draw those. A larger one is
+    ranked with :meth:`~mound.pitches.PitchCollection.tunnels` and its best
+    pair is drawn, which makes ``roki.pitches(game=...).plot_tunnel()`` a
+    reasonable way to find the outing's best sequence.
+
+    Args:
+        collection: two pitches, or a larger collection to rank.
+        commit_distance: feet from the plate where the hitter commits;
+            defaults to :data:`mound.trajectory.DEFAULT_COMMIT_DISTANCE_FEET`.
+        commit_time: seconds before the plate instead of a fixed distance,
+            measured against each pitch's own arrival.
+        ax: existing axes to draw on; a styled figure is made if omitted.
+        title: headline; auto-generated if omitted.
+        subtitle: dek; auto-generated if omitted, ``""`` to omit.
+        source: source line; ``""`` to omit.
+        out: if given, save the figure to this path.
+    """
+    from mound.trajectory import (
+        DEFAULT_COMMIT_DISTANCE_FEET,
+        PLATE_MEASUREMENT_Y_FEET,
+        Trajectory,
+        separation,
+    )
+
+    if commit_distance is not None and commit_time is not None:
+        raise ValueError("pass at most one of commit_distance or commit_time")
+    if commit_time is None and commit_distance is None:
+        commit_distance = DEFAULT_COMMIT_DISTANCE_FEET
+
+    first, second, _ranked = _tunnel_pair(collection)
+    traj_first = Trajectory.from_pitch(first)
+    traj_second = Trajectory.from_pitch(second)
+
+    commit_sep = separation(
+        traj_first, traj_second, distance=commit_distance, time_before_plate=commit_time
+    )
+    plate_sep = separation(traj_first, traj_second, distance=PLATE_MEASUREMENT_Y_FEET)
+
+    tops = [p.sz_top for p in (first, second) if p.sz_top is not None]
+    bots = [p.sz_bot for p in (first, second) if p.sz_bot is not None]
+    sz_top = sum(tops) / len(tops) if tops else DEFAULT_SZ_TOP
+    sz_bot = sum(bots) / len(bots) if bots else DEFAULT_SZ_BOT
+
+    owns_figure = ax is None
+    with plt.rc_context(MOUND_STYLE):
+        if owns_figure:
+            fig, ax = plt.subplots(figsize=(5.2, 6.4))
+            fig.subplots_adjust(top=0.86, bottom=0.09, left=0.1, right=0.96)
+        else:
+            fig = ax.figure
+
+        _draw_home_plate(ax)
+        _draw_strike_zone(ax, sz_top, sz_bot)
+
+        for pitch, traj in ((first, traj_first), (second, traj_second)):
+            color = PITCH_TYPE_COLORS.get(pitch.pitch_type or "", DEFAULT_PITCH_COLOR)
+            points = traj.path(extension=pitch.release_extension)
+            if points:
+                ax.plot(
+                    [p[0] for p in points],
+                    [p[2] for p in points],
+                    color=color,
+                    linewidth=1.9,
+                    alpha=0.9,
+                    zorder=4,
+                    solid_capstyle="round",
+                )
+
+            if commit_time is not None:
+                commit_point = traj.time_before_plate(commit_time)
+            else:
+                commit_point = traj.position_at_distance(commit_distance)
+            if commit_point:
+                ax.scatter(
+                    *commit_point,
+                    s=_COMMIT_MARKER_SIZE,
+                    facecolors=BACKGROUND,
+                    edgecolors=color,
+                    linewidths=1.6,
+                    zorder=5,
+                )
+
+            plate_point = traj.plate_location()
+            if plate_point:
+                ax.scatter(
+                    *plate_point,
+                    s=_PLATE_MARKER_SIZE,
+                    color=color,
+                    zorder=6,
+                    edgecolors=BACKGROUND,
+                    linewidths=1.2,
+                )
+
+        # Low and left: the flight paths sweep the upper middle of the frame
+        # on their way down, which is exactly where a top-left key would sit.
+        _draw_legend_key(ax, "pitch_type", [first.pitch_type, second.pitch_type], top=0.17)
+        _finish_panel(ax)
+        ax.set_ylim(*TUNNEL_Z_RANGE)
+
+        headline = title if title is not None else _tunnel_headline(first, second)
+        if owns_figure:
+            if subtitle is not None:
+                dek = subtitle
+            elif commit_sep is not None and plate_sep is not None:
+                label = commit_distance if commit_time is None else commit_time
+                dek = _tunnel_subtitle(first, second, commit_sep, plate_sep, label)
+            else:
+                dek = ""
+            _add_chrome(fig, headline, dek, source)
+        else:
+            ax.set_title(headline, loc="left", fontsize=12, fontweight="semibold", color=INK)
+
+        if out:
+            Path(out).parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(out, dpi=200, bbox_inches="tight", pad_inches=0.2)
+
+    return ax

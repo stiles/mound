@@ -247,6 +247,126 @@ def pitch_metrics(
     return result[["pitches", *columns]]
 
 
+def tunnels(
+    collection: PitchCollection,
+    *,
+    consecutive: bool = True,
+    commit_distance: float | None = None,
+    commit_time: float | None = None,
+    same_type: bool = False,
+) -> pd.DataFrame:
+    """How closely pairs of pitches travel together before diverging.
+
+    Two pitches "tunnel" when they look identical for as long as the hitter
+    has to decide, then finish somewhere else. This measures that directly
+    off Statcast's trajectory fit: how far apart the two balls are at the
+    commit point, and how far apart they are at the plate.
+
+        >>> roki.pitches(game=825051).tunnels().head(3)
+
+    By default it pairs each pitch with the one that followed it in the same
+    at-bat, since tunneling is a question about sequence -- what the hitter
+    had just seen. Pass ``consecutive=False`` to compare every pair within
+    an at-bat instead. Pairs of the same pitch type are skipped unless
+    ``same_type=True``.
+
+    The commit point defaults to
+    :data:`~mound.trajectory.DEFAULT_COMMIT_DISTANCE_FEET` (23.8 feet).
+    Pass ``commit_time`` instead to fix it at a number of seconds before
+    each pitch reaches the plate, which compares a curveball and a fastball
+    at the same point in the hitter's reaction rather than the same point in
+    space.
+
+    ``ratio`` is plate separation over commit separation. Read it with the
+    tracking's own precision in mind: a pair a tenth of an inch apart at the
+    commit point is not meaningfully closer than one three tenths apart, so
+    the very largest ratios say more about the denominator than the pitches.
+    """
+    from mound.trajectory import (
+        DEFAULT_COMMIT_DISTANCE_FEET,
+        PLATE_MEASUREMENT_Y_FEET,
+        Trajectory,
+        separation,
+    )
+
+    if commit_distance is not None and commit_time is not None:
+        raise ValueError("pass at most one of commit_distance or commit_time")
+    if commit_time is None and commit_distance is None:
+        commit_distance = DEFAULT_COMMIT_DISTANCE_FEET
+
+    columns = [
+        "game_pk",
+        "game_date",
+        "batter_name",
+        "at_bat_number",
+        "first_pitch",
+        "second_pitch",
+        "first_type",
+        "second_type",
+        "first_velocity",
+        "second_velocity",
+        "commit_separation",
+        "plate_separation",
+        "ratio",
+    ]
+
+    by_at_bat: dict[tuple, list] = {}
+    for pitch in collection:
+        if pitch.at_bat_number is None or pitch.pitch_number is None:
+            continue
+        by_at_bat.setdefault((pitch.game_pk, pitch.at_bat_number), []).append(pitch)
+
+    rows = []
+    for pitches in by_at_bat.values():
+        pitches = sorted(pitches, key=lambda p: p.pitch_number)
+        pairs = (
+            zip(pitches, pitches[1:], strict=False)
+            if consecutive
+            else ((a, b) for i, a in enumerate(pitches) for b in pitches[i + 1 :])
+        )
+        for first, second in pairs:
+            if not same_type and first.pitch_type == second.pitch_type:
+                continue
+            traj_a = Trajectory.from_pitch(first)
+            traj_b = Trajectory.from_pitch(second)
+            if traj_a is None or traj_b is None:
+                continue
+
+            commit = separation(
+                traj_a, traj_b, distance=commit_distance, time_before_plate=commit_time
+            )
+            plate = separation(traj_a, traj_b, distance=PLATE_MEASUREMENT_Y_FEET)
+            if commit is None or plate is None:
+                continue
+
+            rows.append(
+                {
+                    "game_pk": first.game_pk,
+                    "game_date": first.game_date,
+                    "batter_name": first.batter_name,
+                    "at_bat_number": first.at_bat_number,
+                    "first_pitch": first.pitch_number,
+                    "second_pitch": second.pitch_number,
+                    "first_type": first.pitch_type,
+                    "second_type": second.pitch_type,
+                    "first_velocity": first.velocity,
+                    "second_velocity": second.velocity,
+                    "commit_separation": round(commit, 1),
+                    "plate_separation": round(plate, 1),
+                    "ratio": round(plate / commit, 1) if commit else float("nan"),
+                }
+            )
+
+    if not rows:
+        return pd.DataFrame(columns=columns)
+
+    return (
+        pd.DataFrame(rows, columns=columns)
+        .sort_values("ratio", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
 def usage_rate(collection: PitchCollection, by: str = "game_date") -> pd.DataFrame:
     """Pitch usage percentage by pitch type, grouped by ``by`` (e.g. per game or date).
 

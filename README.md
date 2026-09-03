@@ -26,6 +26,7 @@ Mound answers questions like these with a few CLI commands or a few lines of Pyt
   - [One outing](#one-outing)
   - [Matchups](#matchups)
   - [Whiff rate, chase rate and pitch metrics](#whiff-rate-chase-rate-and-pitch-metrics)
+  - [Tunneling](#tunneling)
   - [Plots](#plots)
 - [Utilities](#utilities)
   - [Caching](#caching)
@@ -428,6 +429,49 @@ The two rates on the right read differently on purpose: the four-seamer lives in
 The column names are short so the table fits a terminal: `hb` and `ivb` are `horizontal_break` and `induced_vertical_break`, and `release_extension` is left out entirely, since it barely moves between one pitcher's own pitches. Everything at full length, extension included, is a `pitch_metrics()` call away in Python. A `-` marks a number that genuinely isn't there rather than a zero — no chase rate for a pitch type that never left the zone, no whiff rate where nobody swung, no spin or movement where the park's tracking didn't report it.
 
 Every one of these commands has a batter-side counterpart, prefixed `faced-`, built on `Batter` instead of `Pitcher`: `mound faced-mix`, `mound faced-results`, `mound faced-arsenal`, `mound faced-zone` and `mound faced-video` ask the same questions from the hitter's side, e.g. `mound faced-arsenal "Shohei Ohtani" --last 8 --pitcher "Logan Henderson"`.
+
+### Tunneling
+
+Two pitches "tunnel" when they look the same for as long as the hitter has to decide, then finish somewhere else. Savant's feed carries Statcast's nine-parameter fit for every pitch — a release point, a release velocity and a constant acceleration — which describes the whole flight as a quadratic in each axis, so any point between the hand and the plate is available exactly rather than by interpolation. `tunnels()` uses it to measure how far apart two pitches were where the hitter had to commit, and how far apart they finished:
+
+```python
+roki.pitches(game=823601).tunnels()
+```
+
+```
+      batter_name  at_bat_number first_type         second_type  commit_separation  plate_separation  ratio
+    Marcus Semien             15   forkball  four-seam fastball                3.1              17.2    5.5
+    Marcus Semien             38   four-seam          splitter                 2.7              12.8    4.8
+        Juan Soto             23   four-seam            slider                 5.4              22.8    4.2
+```
+
+Separations are in inches. By default each pitch is paired with the one that followed it in the same at-bat, since tunneling is a question about sequence — what the hitter had just seen — and pairs of the same pitch type are skipped. `consecutive=False` compares every pair within an at-bat instead, and `same_type=True` keeps the repeats.
+
+`plot_tunnel()` draws a pair the way the hitter sees it, with an open marker where the swing decision has to be made and a filled one at the plate:
+
+![Sasaki's forkball and four-seamer to Marcus Semien](docs/images/roki_semien_tunnel.png)
+
+```python
+pair = roki.pitches(game=823601).filter(at_bat_number=15).filter(pitch_number=[2, 3])
+pair.plot_tunnel(out="semien_tunnel.png")
+```
+
+Handed a collection larger than two pitches, `plot_tunnel()` ranks it and draws the best pair, so `roki.pitches(game=825051).plot_tunnel()` is a reasonable way to find an outing's best sequence without picking one first.
+
+Two things to know before quoting a number from this. The commit point defaults to 23.8 feet from the plate, which is the distance Baseball Prospectus's tunnel work settled on and so the one to use for comparability — but a fixed distance is 162 milliseconds of a 100 mph four-seamer and 200 of an 80 mph curveball, and the swing decision is a reaction rather than a place, so `commit_time=0.167` fixes it at a number of seconds before each pitch's own arrival instead. And `ratio` is plate separation over commit separation, which inflates without limit as the denominator shrinks: a pair a tenth of an inch apart at the commit point isn't meaningfully tighter than one three tenths apart, so the largest ratios describe the tracking's precision more than the pitcher's.
+
+The underlying flight path is available on any pitch, for anything these two don't answer:
+
+```python
+pitch = roki.pitches(game=823601).pitches[0]
+traj = pitch.trajectory()
+
+traj.plate_location()             # (x, z) where Savant measures it
+traj.position_at_distance(30.0)   # (x, z) 30 feet from the plate
+traj.path(extension=pitch.release_extension)   # release to plate, as (x, y, z)
+```
+
+`plate_location()` reproduces Savant's own `plate_x`/`plate_z` exactly, which is what pins the measurement plane: Savant reports it at the middle of home plate (17/24 feet from the point), not the front edge, and the front edge misses by about a tenth of an inch horizontally and three tenths vertically. Checked across 22,482 cached pitches with no disagreement.
 
 ### Plots
 

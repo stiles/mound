@@ -299,11 +299,21 @@ class PitchCollection:
 
         return usage_rate(self, by=by)
 
+    def tunnels(self, **kwargs) -> pd.DataFrame:
+        from mound.analysis import tunnels
+
+        return tunnels(self, **kwargs)
+
     # -- visualization --------------------------------------------------
     def plot_zone(self, **kwargs) -> matplotlib.axes.Axes:
         from mound.viz import plot_zone
 
         return plot_zone(self, **kwargs)
+
+    def plot_tunnel(self, **kwargs) -> matplotlib.axes.Axes:
+        from mound.viz import plot_tunnel
+
+        return plot_tunnel(self, **kwargs)
 
     # -- video ------------------------------------------------------------
     def download_videos(self, out_dir: str | Path = "videos", **kwargs) -> list[Path]:

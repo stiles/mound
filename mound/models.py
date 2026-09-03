@@ -192,9 +192,32 @@ class Pitch:
     horizontal_break: float | None = None  # inches, same axis/sign convention as plate_x
     induced_vertical_break: float | None = None  # inches, vertical movement net of gravity
 
+    # Statcast's nine-parameter trajectory fit, which describes the whole
+    # flight as a quadratic in each axis. `release_pos_y` is the plane the
+    # fit is anchored at (50 feet), not where the ball actually leaves the
+    # hand -- `release_extension` is what reaches back to that. See
+    # `mound.trajectory` for what these reconstruct.
+    release_pos_y: float | None = None  # feet from the plate at the fit's origin
+    release_velocity_x: float | None = None  # ft/s
+    release_velocity_y: float | None = None  # ft/s, negative (toward the plate)
+    release_velocity_z: float | None = None  # ft/s
+    acceleration_x: float | None = None  # ft/s^2, drag and Magnus together
+    acceleration_y: float | None = None  # ft/s^2
+    acceleration_z: float | None = None  # ft/s^2, includes gravity
+    plate_time: float | None = None  # seconds of flight, as Savant reports it
+
     @classmethod
     def field_names(cls) -> list[str]:
         return [f.name for f in fields(cls)]
+
+    def trajectory(self):
+        """This pitch's flight path, or ``None`` without the tracking fields.
+
+        See :class:`mound.trajectory.Trajectory`.
+        """
+        from mound.trajectory import Trajectory
+
+        return Trajectory.from_pitch(self)
 
     def download_video(self, out: str | Path | None = None) -> Path:
         """Download this pitch's Baseball Savant broadcast clip.
@@ -288,4 +311,12 @@ def pitch_from_savant(raw: dict, *, ends_at_bat: bool | None = None) -> Pitch:
         release_pos_z=raw.get("z0"),
         horizontal_break=raw.get("breakX"),
         induced_vertical_break=raw.get("inducedBreakZ"),
+        release_pos_y=raw.get("y0"),
+        release_velocity_x=raw.get("vx0"),
+        release_velocity_y=raw.get("vy0"),
+        release_velocity_z=raw.get("vz0"),
+        acceleration_x=raw.get("ax"),
+        acceleration_y=raw.get("ay"),
+        acceleration_z=raw.get("az"),
+        plate_time=raw.get("plateTime"),
     )

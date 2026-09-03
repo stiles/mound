@@ -36,6 +36,12 @@ BLOWN_SAVE_GAME = 823915
 # palette needs to show. Every other figure here is one pitch type, and a
 # single type draws in the house color instead.
 SKUBAL_START = 823912
+# Sasaki's July 24 start, whose best tunnel is a forkball and a four-seamer
+# to Marcus Semien: three inches apart where he had to commit, seventeen by
+# the time they got there.
+TUNNEL_GAME = 823601
+TUNNEL_AT_BAT = 15
+TUNNEL_PITCHES = [2, 3]
 # The 40 games behind the Ohtani walkthrough, split into the recent 20 and
 # the 20 before them.
 OHTANI_WINDOW = {"since": "2026-06-28", "until": "2026-08-16"}
@@ -57,6 +63,13 @@ def main() -> None:
     splitters.plot_zone(split_by="stand", out=str(IMAGES / "roki_splitter_zone_by_stand.png"))
     splitters.plot_zone(color_by="stand", out=str(IMAGES / "roki_splitter_zone_color_by_stand.png"))
     splitters.plot_zone(grid=True, out=str(IMAGES / "roki_splitter_zone_grid.png"))
+
+    tunnel_start = roki.pitches(game=TUNNEL_GAME, cache=cache)
+    tunnel_pair = tunnel_start.filter(at_bat_number=TUNNEL_AT_BAT).filter(
+        pitch_number=TUNNEL_PITCHES
+    )
+    print(f"Roki tunnel: {len(tunnel_pair)} pitches to {tunnel_pair.pitches[0].batter_name}")
+    tunnel_pair.plot_tunnel(out=str(IMAGES / "roki_semien_tunnel.png"))
 
     skubal = Pitcher("Tarik Skubal").pitches(game=SKUBAL_START, cache=cache)
     print(f"Skubal: {len(skubal)} pitches, {skubal.to_frame()['pitch_type'].nunique()} types")

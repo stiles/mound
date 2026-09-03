@@ -410,3 +410,102 @@ def test_subtitle_does_not_repeat_a_hitter_already_in_the_headline(mixed_stand_c
     subtitle = _default_subtitle(collection, collection.to_frame())
 
     assert "vs." not in subtitle
+
+
+# -- tunnel plots ---------------------------------------------------------
+
+
+def _tunnel_pitches():
+    from tests.test_trajectory import FOUR_SEAM, SPLITTER, SPLITTER_PLATE
+    from tests.test_trajectory import _pitch as traj_pitch
+
+    return PitchCollection(
+        [
+            traj_pitch(pitch_number=1, **FOUR_SEAM),
+            traj_pitch(
+                pitch_number=2,
+                pitch_type_code="FS",
+                pitch_type="splitter",
+                velocity=89.7,
+                plate_x=SPLITTER_PLATE[0],
+                plate_z=SPLITTER_PLATE[1],
+                **SPLITTER,
+            ),
+        ]
+    )
+
+
+def test_plot_tunnel_draws_a_path_per_pitch():
+    from mound.viz import plot_tunnel
+
+    ax = plot_tunnel(_tunnel_pitches())
+
+    assert len(ax.lines) == 2
+    plt.close(ax.figure)
+
+
+def test_plot_tunnel_colors_paths_by_pitch_type():
+    from mound.viz import plot_tunnel
+
+    ax = plot_tunnel(_tunnel_pitches())
+
+    colors = {to_hex(line.get_color()).lower() for line in ax.lines}
+    assert to_hex(PITCH_TYPE_COLORS["four-seam fastball"]).lower() in colors
+    assert to_hex(PITCH_TYPE_COLORS["splitter"]).lower() in colors
+    plt.close(ax.figure)
+
+
+def test_plot_tunnel_marks_commit_and_plate_for_each_pitch():
+    from mound.viz import plot_tunnel
+
+    ax = plot_tunnel(_tunnel_pitches())
+
+    # One open commit marker and one filled plate marker per pitch.
+    assert len(ax.collections) == 4
+    plt.close(ax.figure)
+
+
+def test_plot_tunnel_subtitle_reports_both_separations():
+    from mound.viz import plot_tunnel
+
+    ax = plot_tunnel(_tunnel_pitches())
+    texts = [t.get_text() for t in ax.figure.texts]
+
+    assert any("at the plate" in t for t in texts)
+    plt.close(ax.figure)
+
+
+def test_plot_tunnel_frame_holds_the_release_point():
+    from mound.viz import TUNNEL_Z_RANGE, plot_tunnel
+
+    ax = plot_tunnel(_tunnel_pitches())
+
+    assert ax.get_ylim() == pytest.approx(TUNNEL_Z_RANGE)
+    highest = max(max(line.get_ydata()) for line in ax.lines)
+    assert highest <= TUNNEL_Z_RANGE[1]
+    plt.close(ax.figure)
+
+
+def test_plot_tunnel_needs_two_pitches_with_trajectories():
+    from mound.viz import plot_tunnel
+
+    with pytest.raises(ValueError):
+        plot_tunnel(PitchCollection([_pitch(0.0, 2.5, "R")]))
+
+
+def test_plot_tunnel_rejects_two_commit_references():
+    from mound.viz import plot_tunnel
+
+    with pytest.raises(ValueError):
+        plot_tunnel(_tunnel_pitches(), commit_distance=23.8, commit_time=0.167)
+
+
+def test_plot_tunnel_on_existing_ax_sets_a_plain_title():
+    from mound.viz import plot_tunnel
+
+    fig, ax = plt.subplots()
+    plot_tunnel(_tunnel_pitches(), ax=ax)
+
+    assert ax.get_title(loc="left")
+    assert not fig.texts
+    plt.close(fig)
