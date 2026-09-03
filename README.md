@@ -640,6 +640,8 @@ ruff check .
 
 Tests run entirely against mocked HTTP fixtures in `tests/fixtures/` (via the `responses` library) and don't require network access.
 
+Releases go out through `./scripts/publish.sh`, which bumps the version, tags and creates a GitHub release; the PyPI upload happens in CI when that release is published, not on your machine. See [PUBLISH.md](PUBLISH.md).
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for planned enhancements beyond this prototype.
