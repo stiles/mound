@@ -6,11 +6,21 @@ Format based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-02
+
 ### Added
 
+- Pitch tunneling, measured rather than eyeballed: `PitchCollection.tunnels()` reports how far apart two pitches were where the hitter had to commit and how far apart they finished, and `plot_tunnel()` draws the pair as he'd see it, with an open marker at the commit point and a filled one at the plate. Pairs each pitch with the one that followed it in the same at-bat by default, since tunneling is a question about sequence; `consecutive=False` and `same_type=True` open that up. Handed more than two pitches, `plot_tunnel()` ranks them and draws the best pair, which makes it a way to find an outing's best sequence rather than only to render one already chosen.
+- `mound/trajectory.py` and the nine fields behind it. Savant's `/gf` feed has carried Statcast's full trajectory fit all along -- release position, release velocity and a constant acceleration carrying drag and Magnus together -- and Mound was parsing four of the nine and dropping the rest. They describe the whole flight as a quadratic in each axis, so `Trajectory` answers for any point between the hand and the plate in closed form: `position_at_distance()`, `time_before_plate()`, `path()`. Exports gain the columns; `Pitch.trajectory()` is the accessor.
+- The commit point is configurable and deliberately so. It defaults to 23.8 feet, which is the distance Baseball Prospectus's tunnel work settled on and therefore the comparable one, but a fixed distance is 162 ms of a 100 mph four-seamer and 200 ms of an 80 mph curveball, and a swing decision is a reaction rather than a place -- so `commit_time` fixes it at a number of seconds before each pitch's own arrival instead. Neither is the right answer for every question, which is why both are there and the README says what each is for.
+- `docs/images/roki_semien_tunnel.png`, and its recipe in `scripts/make_docs_images.py`: Sasaki's forkball and four-seamer to Marcus Semien on July 24, three inches apart where Semien had to commit and seventeen by the time they arrived.
 - The README is published at moundcli.com/docs rather than only linked to on GitHub, rendered from the same file the package ships to PyPI so the page and the installed version can't disagree about what a command does. The site's "Read the docs" button used to hand the reader to GitHub's UI one click after the landing page, and none of the prose that would answer a search for "chase rate vs whiff rate" lived on the site's own domain.
 - Inline code in the site's hand-written prose gets the same tinted treatment the rendered markdown already had, through a shared `.code-inline` class. A flag or command name set in bare green monospace at body size was hard to pick out of a sentence, which is the whole job of marking it as code.
 - Repo-relative links in synced markdown now resolve to site routes where the site hosts the file: `README.md` to `/docs`, `CHANGELOG.md` to `/changelog`, and `docs/examples/<name>.md` to `/examples/<name>`, each keeping its anchor. So the Díaz walkthrough's link into the arsenal section lands on `/docs#whiff-rate-chase-rate-and-pitch-metrics` instead of leaving the site mid-sentence. Anything the site doesn't host still falls back to GitHub, which is what `ROADMAP.md` does, deliberately -- a roadmap on a product site reads as a promise.
+
+### Fixed
+
+- Savant measures `plate_x`/`plate_z` at the *middle* of home plate, 17/24 feet from the point, not at its front edge. Fitting the plane empirically against Savant's own numbers across 22,482 cached pitches lands there exactly and nowhere else; the front edge, which is the intuitive guess, is off by a tenth of an inch horizontally and three tenths vertically -- small enough to look like rounding and large enough to move a pitch between zones. Nothing shipped depended on it before now, since nothing reconstructed a trajectory, but every number in `tunnels()` does. It's the same 17/24 that `mound.zone` already uses for half the plate's width, which is a coincidence of the plate being as deep as it is wide.
 
 ## [0.12.0] - 2026-08-22
 
