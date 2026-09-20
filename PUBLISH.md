@@ -57,6 +57,8 @@ pip install -e ".[dev]"
 brew install gh   # or https://cli.github.com/
 ```
 
+`npm` too, if you want the release commit to carry a synced `site/content/changelog.md` -- the script re-runs `npm run sync` itself when it edits `CHANGELOG.md`, and warns and skips it if `npm` isn't on `PATH`. The Site CI check re-runs the same sync and fails the build on any diff, so a release cut without it leaves that workflow red on a commit that otherwise did nothing wrong.
+
 The PyPI token is a repository secret named `PYPI_API_TOKEN`, held in GitHub
 rather than in your shell:
 

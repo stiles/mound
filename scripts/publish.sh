@@ -103,6 +103,19 @@ if [[ "$NEW_VERSION" != "$CURRENT_VERSION" ]]; then
 
   rm -f mound/__init__.py.bak CHANGELOG.md.bak
   echo "Version set to ${NEW_VERSION}"
+
+  # The site's own CI re-runs this same sync and fails on any diff (Site
+  # workflow, "Check synced content is current") -- which is exactly what a
+  # bare version-bump commit tripped on every release: the sed above edits
+  # CHANGELOG.md, but nothing told site/content/changelog.md. Syncing here,
+  # before that commit, is what keeps the two copies in the commit that
+  # touched either.
+  if command -v npm >/dev/null 2>&1 && [[ -f site/package.json ]]; then
+    (cd site && npm run sync)
+  else
+    echo "Warning: npm not found; skipping site content sync." >&2
+    echo "Run 'npm run sync' in site/ by hand before pushing, or the Site CI check will fail." >&2
+  fi
 fi
 
 # The release notes are read from this section verbatim. Empty means an empty
@@ -143,7 +156,7 @@ read -r -p "Go? (y/n) " -n 1 -r; echo
 # --- 8. Commit, push, tag ---
 echo "--- Git ---"
 if [[ "$NEW_VERSION" != "$CURRENT_VERSION" ]]; then
-  git add mound/__init__.py CHANGELOG.md
+  git add mound/__init__.py CHANGELOG.md site/content site/public/docs-images
   git commit -m "chore(release): ${TAG}"
 fi
 
