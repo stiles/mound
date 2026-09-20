@@ -6,6 +6,8 @@ Format based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-09-20
+
 ### Fixed
 
 - Forkball moved to a different hue of green (`#3E7133`, moss) rather than a different shade of the same one (`#3E8E7E`, teal). Splitter and forkball being close was deliberate -- Statcast's own classifier moves pitches between the two -- but a shade apart is legible in a scatter plot's legend and not in a table naming both as separate rows with nothing else to tell them apart, which is where it actually turned up. `mound/viz.py`'s `PITCH_TYPE_COLORS` and the site's mirrored `--color-pitch-forkball` change together, same as always; `docs/images/roki_semien_tunnel.png` is the one committed chart that draws a forkball and is regenerated to match.
