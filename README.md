@@ -608,6 +608,8 @@ Only the clip page's default embedded angle is captured this way (in practice, t
 
 ### Examples
 
+- [Is Díaz back? Two outings offer reasons for hope](docs/examples/diaz-two-windows.md) — check a viewing hunch against four outings: fastball velocity, missed bats, and better results, with the counts and context behind the comparison. Runnable as `examples/diaz_two_windows.py`.
+
 - [Did Díaz miss "right in the middle"?](docs/examples/diaz-blown-saves.md) — a full walkthrough, from a pitcher's name to a fact-checked postgame quote: finding his recent games, pulling every pitch, breaking down the mix and arsenal, testing a claim about location against the data, and downloading the video. Runnable as `examples/diaz_blown_saves.py`.
 - [Is Ohtani chasing spin away?](docs/examples/ohtani-spin-chase.md) — the same treatment from the hitter's side, testing a hunch from watching games: counting plate appearances with `ends_at_bat`, finding the pitch each strikeout ended on, working out which side of the plate is "away" from hit-by-pitch locations, and splitting chase rate by pitch family and side. Runnable as `examples/shohei_spin_chase.py`, with `examples/shohei_strikeout_supercut.py` stitching every strikeout's clip into one labeled video.
 - `examples/roki_sasaki_end_to_end.py` — the shorter tour: retrieve, filter to one pitch type, calculate, plot, export.
