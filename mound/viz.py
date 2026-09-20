@@ -123,9 +123,14 @@ PITCH_TYPE_COLORS: dict[str, str] = {
     "slow curve": "#B49AD0",
     "changeup": "#6FBBA8",
     "splitter": "#2F7367",
-    # Statcast's own classifier moves pitches between these two, so they're
-    # deliberately a shade apart rather than distinct.
-    "forkball": "#3E8E7E",
+    # Statcast's own classifier moves pitches between these two -- Roki
+    # Sasaki's splitter is a running example of it, see roki_sasaki_end_to_
+    # end.py -- so forkball stays in the same green family as a family cue,
+    # but on a different hue (moss rather than teal) rather than a shade of
+    # the same one. A shade apart read as barely distinguishable wherever
+    # the two are named side by side rather than blended, a table of pitch
+    # types being the case that actually turned this up.
+    "forkball": "#3E7133",
     "screwball": "#F8C153",
     "knuckleball": "#8E8E8E",
     "eephus": "#8E8E8E",

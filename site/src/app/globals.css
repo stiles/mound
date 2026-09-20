@@ -22,9 +22,12 @@
   /* PITCH_TYPE_COLORS, keyed by the same pitch names. Not a gradient per
      family: the assignment maximizes perceptual distance between the pairs
      that actually co-occur in one start, which is why the sinker sits in
-     clay rather than beside the four-seamer, and why splitter and forkball
-     are only a shade apart (Statcast's classifier moves pitches between
-     those two). Changing one here means changing it in viz.py. */
+     clay rather than beside the four-seamer. Splitter and forkball stay in
+     the same green family, since Statcast's classifier moves pitches
+     between those two, but on different hues (teal vs. moss) rather than
+     two shades of one -- a shade apart was too close wherever the two are
+     named side by side rather than blended. Changing one here means
+     changing it in viz.py. */
   --color-pitch-fastball: #5194c3;
   --color-pitch-sinker: #f18851;
   --color-pitch-cutter: #2e6389;
@@ -33,7 +36,7 @@
   --color-pitch-curve: #4e2e6b;
   --color-pitch-change: #6fbba8;
   --color-pitch-splitter: #2f7367;
-  --color-pitch-forkball: #3e8e7e;
+  --color-pitch-forkball: #3e7133;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;

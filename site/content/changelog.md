@@ -6,6 +6,8 @@ Format based on Keep a Changelog.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-20
+
 ### Changed
 
 - `plot_zone()`'s frame crops to the data instead of a fixed 5.5-foot span: the ceiling now sits a fixed pad above the strike zone, extended only as far as the 97th percentile of the pitches actually drawn needs, rounded up to a clean half foot. A typical sample no longer carries a full foot of empty canvas above its tallest pitch, and the figure itself shrinks along with a tightened frame rather than leaving the blank space behind, since every panel keeps the same feet-to-inch scale on both axes (`_INCHES_PER_FOOT`). The 97th percentile, not the true max, decides the ceiling, so one stray backstop-bound fastball among 150 real pitches doesn't stretch the frame for the other 98% of them; that pitch still lands wherever it lands, possibly off the top of the frame, the trade a boxplot makes with its own whiskers. A panel whose in-plot legend key floats in the same top-left corner gets a fixed half-foot of extra headroom, so the key and a chart's own highest pitches stop competing for the same crop.
