@@ -1,11 +1,12 @@
 """Plot pitch locations against a theoretical strike zone.
 
 Kept to matplotlib alone for the default path, to minimize dependencies.
-``kind="heatmap"`` bins pitches into a plain 2D histogram, a reasonable
-tradeoff for a small pitch sample; ``kind="zones"`` counts them into
-Statcast's numbered zones instead of arbitrary bins, so the chart speaks the
-numbering people already argue in; ``kind="kde"`` trades that simplicity for
-a smoother kernel density surface via the optional ``scipy`` dependency
+``kind="heatmap"`` bins pitches into hexagons rather than squares, wide
+enough to pool pitches thrown inches apart instead of scattering them into
+neighboring cells; ``kind="zones"`` counts them into Statcast's numbered
+zones instead of arbitrary bins, so the chart speaks the numbering people
+already argue in; ``kind="kde"`` trades either kind of binning for a
+smoother kernel density surface via the optional ``scipy`` dependency
 (``pip install "mound[viz]"``), better suited to larger samples.
 
 Chart chrome (typography, color, spacing) follows a few house rules: let the
@@ -17,6 +18,7 @@ titles or a boxed legend.
 
 from __future__ import annotations
 
+import math
 from datetime import date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -24,13 +26,16 @@ from typing import TYPE_CHECKING
 import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import LinearSegmentedColormap, PowerNorm, to_rgb
+import pandas as pd
+from matplotlib.colors import LinearSegmentedColormap, Normalize, PowerNorm, to_rgb
 from matplotlib.patches import Polygon, Rectangle
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
 from mound.zone import SZ_LEFT_FEET, SZ_RIGHT_FEET, zone_grid
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
 
@@ -42,7 +47,44 @@ DEFAULT_SZ_TOP = 3.5
 DEFAULT_SZ_BOT = 1.5
 
 PLOT_X_RANGE = (-2.5, 2.5)
-PLOT_Z_RANGE = (-0.5, 5.0)
+_X_SPAN = PLOT_X_RANGE[1] - PLOT_X_RANGE[0]
+
+# The frame's floor is fixed -- it's what leaves room for the home plate
+# glyph, whose lowest point sits at -0.46 -- but the ceiling is no longer a
+# flat constant. A typical outing's highest pitch lands well under a
+# uniform 5' top, which used to spend a fifth of every chart's canvas on
+# empty air above the real data. ``_z_range`` derives an honest one instead;
+# these are its guardrails, not a substitute for one.
+PLOT_Z_BOTTOM = -0.5
+Z_TOP_PAD = 1.0
+Z_TOP_MIN = 3.8
+Z_TOP_MAX = 6.5
+
+# The in-plot legend key floats inside the frame's own top-left corner
+# (see ``_draw_legend_key``), which is exactly the corner a tightened frame
+# now leaves least clear -- the 97th-percentile ceiling that crops the
+# frame is, by definition, close to wherever a chart's highest pitches
+# already sit. This extra pad is spent only when a legend is actually going
+# to be drawn there, so the common single-color chart keeps the full crop.
+LEGEND_TOP_PAD = 0.5
+
+# Inches per foot of plate-coordinate space, shared by both axes so
+# ``ax.set_aspect("equal")`` never has to letterbox the panel inside its
+# own box. Chosen to match this package's original fixed-frame sizing
+# (a 5.5' frame in a 4.9"-tall axes box), so a tightened frame shrinks the
+# page it's drawn on rather than leaving the same blank canvas behind.
+_INCHES_PER_FOOT = 0.9
+
+# Fixed chrome budgets, in inches, independent of how tall a panel's own
+# data region ends up. A panel row's title (used by ``split_by`` and
+# ``plot_zone_panels``) gets its own allowance on top of the figure-level
+# headline/dek, so a faceted figure's per-panel titles don't crowd into it.
+CHROME_TOP_IN = 0.95
+CHROME_BOTTOM_IN = 0.60
+PANEL_TITLE_IN = 0.32
+_LEFT_IN = 0.55
+_RIGHT_IN = 0.25
+_GUTTER_IN = 0.35
 
 INK = "#1A1A1A"
 MUTED = "#6E6E6E"
@@ -144,6 +186,16 @@ KDE_GAMMA = 1.8
 # samples ranging from 5 to 90+ pitches as the tightest setting that still
 # reads as one smooth surface rather than fragmenting into separate islands.
 KDE_DEFAULT_BW = 0.45
+
+# Hexagons rather than squares for ``kind="heatmap"``. A square grid fine
+# enough to resolve a pitch's own footprint (about 0.24' across) checkers
+# into isolated single-count cells scattered well outside any real cluster,
+# since that's finer than the spread between two pitches thrown inches
+# apart. This target cell width sits a little wider than a ball on purpose,
+# so nearby pitches pool into one cell instead of tiling into neighbors that
+# read as noise, and hexagons tile that pooling without the seams a coarser
+# square grid would show.
+HEATMAP_CELL_FEET = 0.32
 
 # Below this fraction of the peak, a KDE surface is treated as background
 # and left transparent, so the home plate/strike zone drawn underneath
@@ -513,17 +565,54 @@ def _draw_legend_key(ax: Axes, column: str, values: list, top: float = 0.97) -> 
         y -= 0.058
 
 
+# Chrome text sits a fixed distance from the figure's own edges, in inches,
+# rather than at a fixed fraction of it. A fraction tuned against one
+# figure height (the original fixed-frame default) drifts once panels start
+# sizing themselves to their data: the same 0.965 that sat a quarter-inch
+# under the top edge of a tall figure lands twice as close on a short one.
+_HEADLINE_FROM_TOP_IN = 0.30
+_SUBTITLE_FROM_TOP_IN = 0.64
+_SOURCE_FROM_BOTTOM_IN = 0.20
+_CHROME_LEFT_IN = 0.55
+
+
 def _add_chrome(fig: Figure, headline: str, subtitle: str, source: str) -> None:
+    height = fig.get_size_inches()[1]
+    left = _CHROME_LEFT_IN / fig.get_size_inches()[0]
+
     fig.text(
-        0.07, 0.965, headline, fontsize=15, fontweight="semibold", color=INK, ha="left", va="top"
+        left,
+        1 - _HEADLINE_FROM_TOP_IN / height,
+        headline,
+        fontsize=17,
+        fontweight="bold",
+        color=INK,
+        ha="left",
+        va="top",
     )
     if subtitle:
-        fig.text(0.07, 0.918, subtitle, fontsize=10.5, color=MUTED, ha="left", va="top")
+        fig.text(
+            left,
+            1 - _SUBTITLE_FROM_TOP_IN / height,
+            subtitle,
+            fontsize=11.5,
+            color=MUTED,
+            ha="left",
+            va="top",
+        )
     if source:
-        fig.text(0.07, 0.02, source, fontsize=8.5, color=FAINT, ha="left", va="bottom")
+        fig.text(
+            left,
+            _SOURCE_FROM_BOTTOM_IN / height,
+            source,
+            fontsize=8.5,
+            color=FAINT,
+            ha="left",
+            va="bottom",
+        )
 
 
-def _draw_kde(ax: Axes, df, bw_method: float | str | None) -> None:
+def _draw_kde(ax: Axes, df, bw_method: float | str | None, z_range: tuple[float, float]) -> None:
     # A KDE needs real spread on both axes -- a single point, or points that
     # are collinear on x or z, make gaussian_kde's covariance matrix
     # singular. Fall back to drawing nothing rather than raising, matching
@@ -541,7 +630,7 @@ def _draw_kde(ax: Axes, df, bw_method: float | str | None) -> None:
     effective_bw = bw_method if bw_method is not None else KDE_DEFAULT_BW
     kde = gaussian_kde(np.vstack([df["plate_x"], df["plate_z"]]), bw_method=effective_bw)
     xs = np.linspace(*PLOT_X_RANGE, 200)
-    zs = np.linspace(*PLOT_Z_RANGE, 200)
+    zs = np.linspace(*z_range, 200)
     grid_x, grid_z = np.meshgrid(xs, zs)
     density = kde(np.vstack([grid_x.ravel(), grid_z.ravel()])).reshape(grid_x.shape)
 
@@ -554,7 +643,7 @@ def _draw_kde(ax: Axes, df, bw_method: float | str | None) -> None:
     ax.imshow(
         masked,
         origin="lower",
-        extent=[*PLOT_X_RANGE, *PLOT_Z_RANGE],
+        extent=[*PLOT_X_RANGE, *z_range],
         cmap=DENSITY_CMAP,
         norm=PowerNorm(gamma=KDE_GAMMA, vmin=density.min(), vmax=density.max()),
         aspect="auto",
@@ -566,11 +655,52 @@ def _draw_kde(ax: Axes, df, bw_method: float | str | None) -> None:
     # what the color itself already shows -- darker means more pitches.
 
 
+def _zone_bounds(df) -> tuple[float, float]:
+    """The strike zone this panel draws, averaged across whoever it faced.
+
+    Falls back to a typical zone when a collection carries no ``sz_top``/
+    ``sz_bot`` at all -- an empty collection, most often.
+    """
+    sz_top = df["sz_top"].mean() if not df.empty and df["sz_top"].notna().any() else DEFAULT_SZ_TOP
+    sz_bot = df["sz_bot"].mean() if not df.empty and df["sz_bot"].notna().any() else DEFAULT_SZ_BOT
+    return sz_top, sz_bot
+
+
+def _z_range(df, sz_top: float, *, legend: bool = False) -> tuple[float, float]:
+    """The frame's vertical bounds, cropped to what this panel actually draws.
+
+    The floor is fixed (see :data:`PLOT_Z_BOTTOM`); the ceiling starts a
+    fixed pad above the zone and extends only as far as the pitches in
+    ``df`` need, so a typical sample doesn't carry a full foot of empty
+    canvas above its tallest pitch. Sized off the 97th percentile rather
+    than the true max, so a stray one- or two-pitch outlier -- a fastball
+    that sailed to the backstop, tracked and real, but not the shape of the
+    outing -- doesn't stretch the frame for the other 98% of it; that pitch
+    still lands wherever it lands, just possibly off the top of the frame,
+    the same trade a boxplot makes with its own whiskers. Rounded up to the
+    nearest half foot so the y-axis lands on clean tick values.
+
+    ``legend=True`` adds :data:`LEGEND_TOP_PAD`, for a panel whose in-plot
+    key will float in this same top-left corner.
+    """
+    top = sz_top + Z_TOP_PAD
+    if not df.empty and df["plate_z"].notna().any():
+        top = max(top, df["plate_z"].quantile(0.97) + 0.4)
+    if legend:
+        top += LEGEND_TOP_PAD
+    top = min(max(top, Z_TOP_MIN), Z_TOP_MAX)
+    top = math.ceil(top * 2) / 2
+    return PLOT_Z_BOTTOM, top
+
+
 def _draw_panel(
     ax: Axes,
     df,
     kind: str,
     color_column: str | None,
+    sz_top: float,
+    sz_bot: float,
+    z_range: tuple[float, float],
     bw_method: float | str | None = None,
     grid: bool = False,
 ) -> list:
@@ -581,33 +711,37 @@ def _draw_panel(
     they were drawn, for an optional legend key; empty for heatmaps/KDE
     surfaces or single-color scatters.
     """
-    sz_top = df["sz_top"].mean() if not df.empty and df["sz_top"].notna().any() else DEFAULT_SZ_TOP
-    sz_bot = df["sz_bot"].mean() if not df.empty and df["sz_bot"].notna().any() else DEFAULT_SZ_BOT
-
     group_values: list = []
 
     if kind == "heatmap":
         if not df.empty:
-            heatmap, _, _ = np.histogram2d(
-                df["plate_x"], df["plate_z"], bins=25, range=[PLOT_X_RANGE, PLOT_Z_RANGE]
-            )
-            masked = np.ma.masked_equal(heatmap, 0)
-            # No colorbar, matching the KDE branch: darker means more pitches
-            # is legible without one, and the vertical bar cost more than it
-            # explained -- it squeezed the panel narrower than every other
-            # plot kind, pulling the strike zone and plate off-center.
-            ax.imshow(
-                masked.T,
-                origin="lower",
-                extent=[*PLOT_X_RANGE, *PLOT_Z_RANGE],
+            # Hexagons, not squares -- see HEATMAP_CELL_FEET. ``mincnt=1``
+            # leaves a bin with no pitches in it undrawn entirely, rather
+            # than shaded at the palette's own zero, so the surface reads as
+            # a figure over the background instead of a wall-to-wall grid.
+            gridsize = max(6, round(_X_SPAN / HEATMAP_CELL_FEET))
+            hexes = ax.hexbin(
+                df["plate_x"],
+                df["plate_z"],
+                gridsize=gridsize,
+                extent=[*PLOT_X_RANGE, *z_range],
                 cmap=DENSITY_CMAP,
-                aspect="auto",
+                mincnt=1,
+                linewidths=0.2,
+                edgecolors=BACKGROUND,
                 zorder=1,
             )
+            # No colorbar, matching the KDE branch: darker already reads as
+            # more pitches, and a vertical bar cost more than it explained
+            # -- it squeezed the panel narrower than every other plot kind,
+            # pulling the strike zone and plate off-center.
+            counts = hexes.get_array()
+            if counts.size:
+                hexes.set_norm(Normalize(vmin=0, vmax=counts.max()))
     elif kind == "zones":
         _draw_zone_counts(ax, df, sz_top, sz_bot)
     elif kind == "kde":
-        _draw_kde(ax, df, bw_method)
+        _draw_kde(ax, df, bw_method, z_range)
     elif kind == "scatter":
         if not df.empty and color_column:
             group_values = _group_values(color_column, df)
@@ -649,11 +783,49 @@ def _draw_panel(
     return group_values
 
 
-def _finish_panel(ax: Axes) -> None:
+def _finish_panel(ax: Axes, z_range: tuple[float, float]) -> None:
     ax.set_xlim(*PLOT_X_RANGE)
-    ax.set_ylim(*PLOT_Z_RANGE)
+    ax.set_ylim(*z_range)
     ax.set_aspect("equal")
     _style_axes(ax)
+
+
+def _panel_geometry(
+    n_cols: int,
+    z_range: tuple[float, float],
+    *,
+    n_rows: int = 1,
+    panel_titles: bool = False,
+) -> tuple[tuple[float, float], dict]:
+    """Figure size and ``subplots_adjust`` kwargs for an ``n_rows``x``n_cols`` grid.
+
+    Every panel shares the same feet-to-inch scale (:data:`_INCHES_PER_FOOT`)
+    on both axes, so a tightened ``z_range`` shrinks the figure instead of
+    leaving blank canvas behind, and a chart with several panels sits at the
+    same physical scale as one with one. Chrome (headline, dek, source, and
+    optionally a per-panel title row, repeated for every row of the grid)
+    gets a fixed inches budget rather than a fraction of the figure, so it
+    doesn't grow or shrink along with it.
+    """
+    panel_w = _X_SPAN * _INCHES_PER_FOOT
+    panel_h = (z_range[1] - z_range[0]) * _INCHES_PER_FOOT
+    title_in = PANEL_TITLE_IN if panel_titles else 0
+
+    width = _LEFT_IN + n_cols * panel_w + (n_cols - 1) * _GUTTER_IN + _RIGHT_IN
+    content_h = n_rows * (panel_h + title_in) + (n_rows - 1) * _GUTTER_IN
+    height = CHROME_TOP_IN + content_h + CHROME_BOTTOM_IN
+
+    rect = {
+        "left": _LEFT_IN / width,
+        "right": 1 - _RIGHT_IN / width,
+        "top": 1 - CHROME_TOP_IN / height,
+        "bottom": CHROME_BOTTOM_IN / height,
+    }
+    if n_cols > 1:
+        rect["wspace"] = _GUTTER_IN / panel_w
+    if n_rows > 1:
+        rect["hspace"] = (_GUTTER_IN + title_in) / panel_h
+    return (width, height), rect
 
 
 def plot_zone(
@@ -674,8 +846,8 @@ def plot_zone(
     Args:
         collection: pitches to plot.
         kind: ``"scatter"`` for individual pitch points, ``"heatmap"`` for
-            a 2D-histogram density plot, ``"zones"`` to count pitches into
-            Statcast's numbered zones instead of arbitrary bins, or
+            a hexagonally-binned density plot, ``"zones"`` to count pitches
+            into Statcast's numbered zones instead of arbitrary bins, or
             ``"kde"`` for a smoother kernel density estimate (requires the
             optional ``scipy`` dependency; install with
             ``pip install "mound[viz]"``).
@@ -745,18 +917,23 @@ def plot_zone(
         )
 
     owns_figure = ax is None
+    sz_top, sz_bot = _zone_bounds(df)
+    z_range = _z_range(df, sz_top, legend=color_column is not None)
 
     with plt.rc_context(MOUND_STYLE):
         if owns_figure:
-            fig, ax = plt.subplots(figsize=(5.2, 6.4))
-            fig.subplots_adjust(top=0.86, bottom=0.09, left=0.1, right=0.96)
+            figsize, rect = _panel_geometry(1, z_range)
+            fig, ax = plt.subplots(figsize=figsize)
+            fig.subplots_adjust(**rect)
         else:
             fig = ax.figure
 
-        group_values = _draw_panel(ax, df, kind, color_column, bw_method, grid)
+        group_values = _draw_panel(
+            ax, df, kind, color_column, sz_top, sz_bot, z_range, bw_method, grid
+        )
         if len(group_values) > 1:
             _draw_legend_key(ax, color_column, group_values)
-        _finish_panel(ax)
+        _finish_panel(ax, z_range)
 
         headline = title if title is not None else _default_headline(collection, df)
         if owns_figure:
@@ -790,17 +967,27 @@ def _plot_zone_faceted(
     if not values:
         raise ValueError(f"No non-null values found for split_by={split_by!r}")
 
+    # Bounds are drawn from every facet combined, not each one alone, so the
+    # strike zone and frame are the same physical size in every panel --
+    # comparing spread across two panels only means something if neither one
+    # has quietly rescaled to its own subset.
+    sz_top, sz_bot = _zone_bounds(df)
+    z_range = _z_range(df, sz_top, legend=color_column is not None)
+
     with plt.rc_context(MOUND_STYLE):
-        fig, axes = plt.subplots(1, len(values), figsize=(5.0 * len(values), 6.4), sharey=True)
+        figsize, rect = _panel_geometry(len(values), z_range, panel_titles=True)
+        fig, axes = plt.subplots(1, len(values), figsize=figsize, sharey=True)
         axes = np.atleast_1d(axes)
-        fig.subplots_adjust(top=0.84, bottom=0.09, left=0.08, right=0.96, wspace=0.12)
+        fig.subplots_adjust(**rect)
 
         for i, (value, panel_ax) in enumerate(zip(values, axes, strict=True)):
             subset = df[df[column] == value]
-            group_values = _draw_panel(panel_ax, subset, kind, color_column, bw_method, grid)
+            group_values = _draw_panel(
+                panel_ax, subset, kind, color_column, sz_top, sz_bot, z_range, bw_method, grid
+            )
             if i == 0 and len(group_values) > 1:
                 _draw_legend_key(panel_ax, color_column, group_values)
-            _finish_panel(panel_ax)
+            _finish_panel(panel_ax, z_range)
             if i > 0:
                 panel_ax.tick_params(labelleft=False)
 
@@ -812,6 +999,102 @@ def _plot_zone_faceted(
         headline = title if title is not None else _default_headline(collection, df)
         dek = subtitle if subtitle is not None else _default_subtitle(collection, df)
         _add_chrome(fig, headline, dek, source)
+
+        if out:
+            Path(out).parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(out, dpi=200, bbox_inches="tight", pad_inches=0.2)
+
+    return axes
+
+
+def plot_zone_panels(
+    panels: Sequence[tuple[str, PitchCollection]],
+    title: str,
+    *,
+    ncols: int | None = None,
+    kind: str = "scatter",
+    color_by: str | None = "pitch_type",
+    grid: bool = False,
+    bw_method: float | str | None = None,
+    subtitle: str = "",
+    source: str = "Source: MLB Statcast (Baseball Savant), via Mound",
+    out: str | None = None,
+) -> np.ndarray:
+    """Draw several pitch collections as chrome-complete panels in a grid.
+
+    ``plot_zone`` gives a single chart a headline, a dek and a source line;
+    ``split_by`` gives the same to a figure faceted from one collection's
+    own column. Neither covers a comparison the caller assembles by hand --
+    a before/after, two non-adjacent windows, a grid of pitch type by
+    outing -- and every one of those in this package used to get built with
+    a bare ``plt.subplots()`` and a ``fig.suptitle()``, which meant no dek,
+    no source line, and no shared frame between panels. This is the same
+    chrome and the same data-driven, shared vertical range as ``split_by``,
+    for panels the caller names instead of ones a column's values name for
+    it.
+
+    Args:
+        panels: ``(label, collection)`` pairs, one per panel, drawn in
+            order, row-major, into a grid ``ncols`` wide.
+        title: figure headline. Required, since panels rarely share the one
+            subject an auto-generated headline assumes.
+        ncols: panels per row; defaults to one row (``len(panels)`` wide).
+        kind, color_by, grid, bw_method: passed through to every panel; see
+            ``plot_zone``.
+        subtitle: dek shown under the headline; omitted if blank.
+        source: source line; pass ``""`` to omit it.
+        out: if given, save the figure to this path.
+
+    Returns:
+        The grid of axes, shaped ``(nrows, ncols)``.
+    """
+    if not panels:
+        raise ValueError("plot_zone_panels needs at least one panel")
+
+    ncols = ncols or len(panels)
+    nrows = math.ceil(len(panels) / ncols)
+
+    frames = [c.to_frame().dropna(subset=["plate_x", "plate_z"]) for _, c in panels]
+    combined = pd.concat(frames) if frames else pd.DataFrame()
+
+    color_column = _resolve_column(color_by, combined, param="color_by") if color_by else None
+    # Same rule plot_zone applies to a single collection: a color that
+    # separates nothing across every panel combined isn't worth spending,
+    # decided once against the whole figure so one panel can't end up keyed
+    # by color while its neighbor, showing only one of the values, isn't.
+    if color_column and combined[color_column].nunique() <= 1:
+        color_column = None
+
+    sz_top, sz_bot = _zone_bounds(combined)
+    z_range = _z_range(combined, sz_top, legend=color_column is not None)
+
+    with plt.rc_context(MOUND_STYLE):
+        figsize, rect = _panel_geometry(ncols, z_range, n_rows=nrows, panel_titles=True)
+        fig, axes = plt.subplots(nrows, ncols, figsize=figsize, sharey=True, squeeze=False)
+        fig.subplots_adjust(**rect)
+
+        legend_drawn = False
+        for i, ((label, _collection), frame) in enumerate(zip(panels, frames, strict=True)):
+            row, col = divmod(i, ncols)
+            panel_ax = axes[row, col]
+            group_values = _draw_panel(
+                panel_ax, frame, kind, color_column, sz_top, sz_bot, z_range, bw_method, grid
+            )
+            if not legend_drawn and len(group_values) > 1:
+                _draw_legend_key(panel_ax, color_column, group_values)
+                legend_drawn = True
+            _finish_panel(panel_ax, z_range)
+            if col > 0:
+                panel_ax.tick_params(labelleft=False)
+            panel_ax.set_title(label, loc="left", fontsize=11, fontweight="semibold", color=INK)
+
+        # A grid that doesn't fill its last row leaves the remainder blank
+        # rather than drawing an empty, misleadingly axed panel.
+        for j in range(len(panels), nrows * ncols):
+            row, col = divmod(j, ncols)
+            axes[row, col].axis("off")
+
+        _add_chrome(fig, title, subtitle, source)
 
         if out:
             Path(out).parent.mkdir(parents=True, exist_ok=True)
@@ -945,8 +1228,9 @@ def plot_tunnel(
     owns_figure = ax is None
     with plt.rc_context(MOUND_STYLE):
         if owns_figure:
-            fig, ax = plt.subplots(figsize=(5.2, 6.4))
-            fig.subplots_adjust(top=0.86, bottom=0.09, left=0.1, right=0.96)
+            figsize, rect = _panel_geometry(1, TUNNEL_Z_RANGE)
+            fig, ax = plt.subplots(figsize=figsize)
+            fig.subplots_adjust(**rect)
         else:
             fig = ax.figure
 
@@ -995,8 +1279,7 @@ def plot_tunnel(
         # Low and left: the flight paths sweep the upper middle of the frame
         # on their way down, which is exactly where a top-left key would sit.
         _draw_legend_key(ax, "pitch_type", [first.pitch_type, second.pitch_type], top=0.17)
-        _finish_panel(ax)
-        ax.set_ylim(*TUNNEL_Z_RANGE)
+        _finish_panel(ax, TUNNEL_Z_RANGE)
 
         headline = title if title is not None else _tunnel_headline(first, second)
         if owns_figure:

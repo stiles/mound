@@ -6,6 +6,17 @@ Format based on Keep a Changelog.
 
 ## [Unreleased]
 
+### Changed
+
+- `plot_zone()`'s frame crops to the data instead of a fixed 5.5-foot span: the ceiling now sits a fixed pad above the strike zone, extended only as far as the 97th percentile of the pitches actually drawn needs, rounded up to a clean half foot. A typical sample no longer carries a full foot of empty canvas above its tallest pitch, and the figure itself shrinks along with a tightened frame rather than leaving the blank space behind, since every panel keeps the same feet-to-inch scale on both axes (`_INCHES_PER_FOOT`). The 97th percentile, not the true max, decides the ceiling, so one stray backstop-bound fastball among 150 real pitches doesn't stretch the frame for the other 98% of them; that pitch still lands wherever it lands, possibly off the top of the frame, the trade a boxplot makes with its own whiskers. A panel whose in-plot legend key floats in the same top-left corner gets a fixed half-foot of extra headroom, so the key and a chart's own highest pitches stop competing for the same crop.
+- `kind="heatmap"` bins into hexagons instead of squares. A square grid fine enough to resolve a pitch's own footprint (about a quarter foot across) checkered into isolated single-count cells scattered well outside any real cluster, since that's finer than the spread between two pitches thrown inches apart; hexagons sized a little wider than a ball pool that spread into one cell instead, and tile without the seams a coarser square grid would show. Empty hexagons are left undrawn (`mincnt=1`) rather than shaded at the palette's own floor, so the surface still reads as a figure over the background rather than a wall-to-wall grid.
+- The headline/dek pairing above a chart is bolder and better separated: 17px bold instead of 15px semibold for the headline, with more room before the 11.5px dek beneath it. Both are now positioned a fixed distance from the figure's own edges in inches, rather than at a fixed fraction of it, so the spacing holds regardless of how tall a cropped frame ends up.
+- The tunnel plot's frame was quietly narrower than it needed to be: fixed at the same figure size `plot_zone()` used, whose box didn't match `TUNNEL_Z_RANGE`'s taller aspect ratio, so `set_aspect("equal")` was letterboxing roughly half a foot of blank margin onto each side to keep the scale honest. It now sizes its own box to the frame it actually draws, the same geometry `plot_zone()` uses, so the full width is real plot instead of margin.
+
+### Added
+
+- `plot_zone_panels()`, for a comparison assembled by hand rather than one collection's own facets -- a before/after, two non-adjacent windows, a grid of pitch type by outing. `plot_zone()` gives a single chart a headline, dek and source line; `split_by` gives the same to a figure faceted from one collection's column. Every multi-panel figure built outside those two paths used to lose both: a bare `plt.subplots()` and `fig.suptitle()`, no dek, no source line, and no frame shared between panels. `plot_zone_panels()` takes `(label, collection)` pairs instead of a column's distinct values, wraps into a grid with `ncols`, and draws every panel against the same data-driven vertical range the rest of this release adds. `scripts/make_docs_images.py` and the two example scripts that used to hand-roll this are rebuilt on it.
+
 ## [0.13.0] - 2026-09-02
 
 ### Added

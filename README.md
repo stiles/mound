@@ -491,7 +491,7 @@ splitters.plot_zone(
 )
 ```
 
-`kind="heatmap"` bins pitches into a plain 2D histogram; `kind="kde"` renders a smoother kernel density surface instead (better suited to larger samples), via the optional `scipy` dependency (`pip install "mound[viz]"`). Pass `bw_method` to control its bandwidth, e.g. `plot_zone(kind="kde", bw_method=0.3)`. Neither carries a colorbar — darker means more pitches, and a vertical scale bar would squeeze the panel out of alignment with every other plot kind.
+`kind="heatmap"` bins pitches into hexagons rather than squares — wide enough to pool pitches thrown a few inches apart instead of scattering them into separate cells, which is what a square grid fine enough to resolve a single pitch's own footprint does. `kind="kde"` renders a smoother kernel density surface instead (better suited to larger samples), via the optional `scipy` dependency (`pip install "mound[viz]"`). Pass `bw_method` to control its bandwidth, e.g. `plot_zone(kind="kde", bw_method=0.3)`. Neither carries a colorbar — darker means more pitches, and a vertical scale bar would squeeze the panel out of alignment with every other plot kind.
 
 `kind="zones"` counts pitches into [Statcast's numbered zones](#zones) rather than into bins of its own, so the picture is labeled in the same 1-9 and 11-14 that `zone` and `--zone` take:
 
@@ -512,6 +512,22 @@ splitters.plot_zone(grid=True, out="splitter_zone_grid.png")
 ```
 
 Pass `subtitle=""` or `source=""` to omit either. Passing your own `ax` (e.g. for a multi-panel figure) skips the dek/source and falls back to a plain left-aligned title, so `plot_zone()` behaves as a well-mannered subplot.
+
+For a comparison you're assembling by hand — a before/after, two non-adjacent windows, a grid that isn't one column's own values — `plot_zone_panels()` gives a list of `(label, collection)` pairs the same chrome and the same shared, data-driven frame that `split_by` gives one collection's facets:
+
+```python
+from mound.viz import plot_zone_panels
+
+plot_zone_panels(
+    [("Jul 29–Aug 10: 65 fastballs", before), ("Aug 13: 15 fastballs", aug13)],
+    "Where Díaz's fastball went, before and during the blown save",
+    out="diaz_ff_panels.png",
+)
+```
+
+![Where Díaz's fastball went, before and during the blown save](docs/images/diaz_ff_panels.png)
+
+Pass `ncols` to wrap into a grid — e.g. pitch type by outing, `ncols=2` for two outings per row.
 
 Pitch location isn't mirrored for batter handedness, so mixing lefties and righties in one panel can blur the picture — pass `split_by="stand"` to break it into a vs-LHB / vs-RHB pair, each with its own strike zone and pitch count:
 

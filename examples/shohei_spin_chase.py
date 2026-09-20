@@ -18,11 +18,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import pandas as pd
 
 from mound import Batter, PitchCollection
-from mound.viz import MOUND_STYLE
+from mound.viz import plot_zone_panels
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 
@@ -132,14 +131,17 @@ def main() -> None:
     print(pd.DataFrame(windows).to_string(), "\n")
 
     panels = OUTPUT_DIR / "ohtani_chase_panels.png"
-    with plt.rc_context(MOUND_STYLE):
-        fig, axes = plt.subplots(1, 2, figsize=(9, 5.6))
-        for ax, (label, window) in zip(
-            axes, (("Jun 28\u2013Jul 24", prior), ("Jul 25\u2013Aug 16", recent)), strict=True
-        ):
-            chased = chases(window, ohtani.player)
-            chased.plot_zone(ax=ax, color_by=None, title=f"{label}: {len(chased)} chases")
-        fig.savefig(panels, dpi=150, bbox_inches="tight")
+    windows = (("Jun 28\u2013Jul 24", prior), ("Jul 25\u2013Aug 16", recent))
+    chase_panels = []
+    for label, window in windows:
+        chased = chases(window, ohtani.player)
+        chase_panels.append((f"{label}: {len(chased)} chases", chased))
+    plot_zone_panels(
+        chase_panels,
+        "Ohtani's swings at spin away and off the plate",
+        color_by=None,
+        out=str(panels),
+    )
     print(f"Saved the chase panels to {panels}")
 
     plot = OUTPUT_DIR / "ohtani_strikeout_pitches.png"

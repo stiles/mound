@@ -17,11 +17,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import pandas as pd
 
 from mound import Pitcher
-from mound.viz import MOUND_STYLE
+from mound.viz import plot_zone_panels
 
 GAMES = [
     ("August", "2026-08-14", "Milwaukee Brewers", "home", 823913),
@@ -259,33 +258,25 @@ def main() -> None:
     print(report)
 
     pitch_types = list(frame.pitch_type.unique())
-    with plt.rc_context(MOUND_STYLE):
-        fig, axes = plt.subplots(
-            len(pitch_types), 2, figsize=(10, 5 * len(pitch_types)), squeeze=False
-        )
-        for row, pitch_type in enumerate(pitch_types):
-            for col, window in enumerate(["August", "September"]):
-                ids = [game[4] for game in GAMES if game[0] == window]
-                subset = pitches.filter(game=ids, pitch_type=pitch_type)
-                subset.plot_zone(
-                    ax=axes[row, col],
-                    title=(
-                        f"{'Aug. 14 & 17' if window == 'August' else 'Sept. 18 & 19'}"
-                        f" · {len(subset)} pitches\n{pitch_type}"
-                    ),
-                    grid=True,
-                )
-        fig.suptitle("Edwin Díaz: two August outings, two September outings", fontsize=16)
-        fig.text(
-            0.05,
-            0.02,
-            "2026 · Catcher's view · Zone reflects each panel's hitters\n"
-            "Source: MLB Statcast (Baseball Savant), via Mound",
-            fontsize=9,
-        )
-        fig.tight_layout(rect=(0, 0.06, 1, 0.95), h_pad=2.5)
-        fig.savefig(args.out_dir / "locations.png", dpi=150, bbox_inches="tight")
-        plt.close(fig)
+    panels = []
+    for pitch_type in pitch_types:
+        for window in ["August", "September"]:
+            ids = [game[4] for game in GAMES if game[0] == window]
+            subset = pitches.filter(game=ids, pitch_type=pitch_type)
+            label = (
+                f"{'Aug. 14 & 17' if window == 'August' else 'Sept. 18 & 19'}"
+                f" \u00b7 {len(subset)} {pitch_type}"
+            )
+            panels.append((label, subset))
+    plot_zone_panels(
+        panels,
+        "Edwin D\u00edaz: two August outings, two September outings",
+        ncols=2,
+        grid=True,
+        subtitle="Catcher's view \u00b7 zone reflects each panel's own hitters",
+        source="2026 \u00b7 Source: MLB Statcast (Baseball Savant), via Mound",
+        out=str(args.out_dir / "locations.png"),
+    )
     print(f"\nSaved tables, report and chart to {args.out_dir}")
 
 

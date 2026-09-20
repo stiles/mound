@@ -138,8 +138,8 @@ export const features = [
 export const plots = [
   {
     src: "/docs-images/roki_splitter_zone.png",
-    width: 1005,
-    height: 1289,
+    width: 1011,
+    height: 1190,
     label: 'kind="scatter"',
     caption:
       "The default. Points are colored by pitch type when a plot shows more than one, from a palette fixed by pitch name rather than assigned per chart.",
@@ -147,8 +147,8 @@ export const plots = [
   },
   {
     src: "/docs-images/diaz_ff_season_heatmap.png",
-    width: 1005,
-    height: 1289,
+    width: 1065,
+    height: 1280,
     label: 'kind="heatmap"',
     caption:
       "Binned density for larger samples. No colorbar — darker means more pitches, and the panel stays aligned with every other kind.",
@@ -186,8 +186,8 @@ export const clips = {
 
 export const splitPlot = {
   src: "/docs-images/roki_splitter_zone_by_stand.png",
-  width: 1865,
-  height: 1289,
+  width: 1981,
+  height: 1254,
   label: 'split_by="stand"',
   caption:
     "Location isn't mirrored for handedness, so mixing lefties and righties in one panel blurs the picture. Split it into a pair, each with its own zone and pitch count.",

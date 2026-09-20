@@ -19,10 +19,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt
-
 from mound import Batter, PitchCollection, Pitcher
-from mound.viz import MOUND_STYLE
+from mound.viz import plot_zone_panels
 
 IMAGES = Path(__file__).resolve().parent.parent / "docs" / "images"
 CACHE = Path(__file__).resolve().parent.parent / "cache"
@@ -87,18 +85,15 @@ def main() -> None:
     post = season_ff.filter(since="2026-07-29")
     before = post.filter(until="2026-08-10")
     aug13 = post.filter(since="2026-08-13")
-    with plt.rc_context(MOUND_STYLE):
-        fig, axes = plt.subplots(1, 2, figsize=(9, 5.6))
-        before.plot_zone(ax=axes[0], title=f"Jul 29\u2013Aug 10: {len(before)} fastballs")
-        aug13.plot_zone(ax=axes[1], title=f"Aug 13: {len(aug13)} fastballs")
-        fig.suptitle(
-            "Where D\u00edaz's fastball went, before and during the blown save",
-            fontsize=14,
-            fontweight="semibold",
-            x=0.02,
-            ha="left",
-        )
-        fig.savefig(IMAGES / "diaz_ff_panels.png", dpi=150, bbox_inches="tight")
+    plot_zone_panels(
+        [
+            (f"Jul 29\u2013Aug 10: {len(before)} fastballs", before),
+            (f"Aug 13: {len(aug13)} fastballs", aug13),
+        ],
+        "Where D\u00edaz's fastball went, before and during the blown save",
+        color_by=None,
+        out=str(IMAGES / "diaz_ff_panels.png"),
+    )
     print(f"Panels: {len(before)} before, {len(aug13)} on Aug 13")
 
     ohtani = Batter("Shohei Ohtani")
@@ -123,24 +118,21 @@ def main() -> None:
     )
 
     # Swings at spin away and off the plate, this stretch against the one before.
-    with plt.rc_context(MOUND_STYLE):
-        fig, axes = plt.subplots(1, 2, figsize=(9, 5.6))
-        windows = (("Jun 28\u2013Jul 24", prior), ("Jul 25\u2013Aug 16", recent))
-        for ax, (label, window) in zip(axes, windows, strict=True):
-            chased = PitchCollection(
-                [p for p in window.filter(zone=[11, 13], pitch_type=SPIN) if p.is_swing],
-                batter=ohtani.player,
-            )
-            chased.plot_zone(ax=ax, color_by=None, title=f"{label}: {len(chased)} chases")
-            print(f"Ohtani chases, {label}: {len(chased)}")
-        fig.suptitle(
-            "Ohtani's swings at spin away and off the plate",
-            fontsize=14,
-            fontweight="semibold",
-            x=0.02,
-            ha="left",
+    windows = (("Jun 28\u2013Jul 24", prior), ("Jul 25\u2013Aug 16", recent))
+    chase_panels = []
+    for label, window in windows:
+        chased = PitchCollection(
+            [p for p in window.filter(zone=[11, 13], pitch_type=SPIN) if p.is_swing],
+            batter=ohtani.player,
         )
-        fig.savefig(IMAGES / "ohtani_chase_panels.png", dpi=150, bbox_inches="tight")
+        chase_panels.append((f"{label}: {len(chased)} chases", chased))
+        print(f"Ohtani chases, {label}: {len(chased)}")
+    plot_zone_panels(
+        chase_panels,
+        "Ohtani's swings at spin away and off the plate",
+        color_by=None,
+        out=str(IMAGES / "ohtani_chase_panels.png"),
+    )
 
 
 if __name__ == "__main__":
