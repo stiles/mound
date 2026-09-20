@@ -156,7 +156,7 @@ export const plots = [
   },
 ];
 
-/** The commands, pitch IDs and pitch details come from step 7 of the Díaz
+/** The commands, pitch IDs and pitch details come from the video section of the Díaz
  *  walkthrough. The poster frames are pulled from the clips those commands
  *  downloaded; only the YouTube IDs originate outside the repo. */
 export const clips = {

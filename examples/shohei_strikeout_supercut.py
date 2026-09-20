@@ -39,7 +39,6 @@ from mound.viz import BACKGROUND, DEFAULT_PITCH_COLOR, FAINT, INK, MUTED, PITCH_
 OUTPUT_DIR = Path(__file__).parent / "output"
 CLIP_DIR = OUTPUT_DIR / "clips"
 
-GAMES = 20
 SPIN = ["slider", "sweeper", "slurve", "curveball", "knuckle curve", "changeup", "splitter"]
 AWAY_OFF_PLATE = (11, 13)
 
@@ -234,7 +233,7 @@ def main() -> None:
     CLIP_DIR.mkdir(parents=True, exist_ok=True)
 
     ohtani = Batter("Shohei Ohtani")
-    faced = ohtani.pitches(last=GAMES, cache=True)
+    faced = ohtani.pitches(since="2026-07-25", until="2026-08-16", cache=True)
     strikeouts = [
         p
         for p in faced.filter(ends_at_bat=True)

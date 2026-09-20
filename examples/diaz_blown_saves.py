@@ -1,9 +1,8 @@
 """Did Edwin Díaz miss "right in the middle"? A worked example.
 
-Companion script to docs/examples/diaz-blown-saves.md. Walks the same seven
-steps as the write-up: find the pitcher, list his recent appearances, pull
-every pitch, break down the mix by game, compare the arsenal's swing/whiff/
-chase rates, test a quote against pitch locations, and pull the video.
+Companion script to docs/examples/diaz-blown-saves.md. Reproduces the
+Aug. 7–13, 2026 sample, compares fastball locations with the season through
+Aug. 13, and exports the pitches, a location chart and a broadcast clip.
 
 Requires network access (hits the live MLB Stats API and Baseball Savant).
 Run with:
@@ -53,7 +52,7 @@ def main() -> None:
     print(f"Found {diaz.name} (MLB ID {diaz.id})\n")
 
     # 2. Pull his last four appearances. Caching keeps repeat runs cheap.
-    last4 = diaz.pitches(last=4, cache=True)
+    last4 = diaz.pitches(since="2026-08-07", until="2026-08-13", cache=True)
     frame = last4.to_frame()
     print(f"{len(last4)} pitches across {len(last4.games)} games: {last4.games}")
     print(frame.groupby(["game_date", "game_pk"]).size().to_string(), "\n")
@@ -73,15 +72,15 @@ def main() -> None:
     print(arsenal.to_string(), "\n")
 
     # 5. Test the quote: were the fastballs really in the middle?
-    season = diaz.pitches(season=2026, cache=True)
+    season = diaz.pitches(season=2026, until="2026-08-13", cache=True)
     season_ff = height_bands(season.to_frame().query("pitch_type == 'four-seam fastball'"))
     blown_save_ff = season_ff[season_ff["game_date"] == "2026-08-13"]
 
-    print("Four-seam location, Aug 13 vs. the season:")
+    print("Four-seam location, Aug 13 vs. the season through Aug 13:")
     comparison = pd.DataFrame(
         {
             "Aug 13": blown_save_ff["band"].value_counts(normalize=True).mul(100),
-            "2026 season": season_ff["band"].value_counts(normalize=True).mul(100),
+            "Season through Aug 13": season_ff["band"].value_counts(normalize=True).mul(100),
         }
     ).round(1)
     print(comparison.to_string(), "\n")

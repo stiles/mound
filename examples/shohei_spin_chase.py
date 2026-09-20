@@ -1,11 +1,9 @@
 """Is Ohtani chasing spin away? A worked example from the hitter's side.
 
-Companion script to docs/examples/ohtani-spin-chase.md. Walks the same seven
-steps as the write-up: pull 40 games from the hitter's side, count plate
-appearances, find the pitch each strikeout ended on, settle which side of
-the plate is "away", split his chase rate by pitch family and side, compare
-the recent 20 games against the 20 before them, and list the video IDs for
-the strikeouts that came on spin off the plate.
+Companion script to docs/examples/ohtani-spin-chase.md. Compares the
+20 games from July 25–Aug. 16, 2026 with the preceding 20 games, counting
+strikeouts and swings at breaking and offspeed pitches outside the zone
+on the away side. Prints the supporting tables and saves the charts.
 
 Reading from a hitter's side is one Savant game feed per game he played, so
 caching matters more here than in the pitcher-side examples.
@@ -23,7 +21,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from mound import Batter, PitchCollection, Pitcher
+from mound import Batter, PitchCollection
 from mound.viz import MOUND_STYLE
 
 OUTPUT_DIR = Path(__file__).parent / "output"
@@ -32,8 +30,7 @@ GAMES = 20
 SPLIT_DATE = "2026-07-25"  # the recent 20 games start here
 # Everything that isn't a fastball, sinker or cutter.
 SPIN = ["slider", "sweeper", "slurve", "curveball", "knuckle curve", "changeup", "splitter"]
-# The quadrants off the plate on a left-handed hitter's outer half, which
-# step 4 establishes from hit-by-pitch locations.
+# Outside-zone quadrants on a left-handed hitter's away side.
 AWAY_OFF_PLATE = [11, 13]
 
 
@@ -55,10 +52,10 @@ def summarize(window) -> dict[str, float]:
         "plate appearances": len(ends),
         "strikeouts": len(struck_out),
         "strikeout rate": round(100 * len(struck_out) / len(ends), 1),
-        "spin away, off the plate": len(chased),
+        "breaking/offspeed outside, away": len(chased),
         "swung at": int(chased.is_swing.sum()),
         "chase rate there": round(100 * chased.is_swing.mean(), 1),
-        "strikeouts ending there": int(struck_out.zone.isin(AWAY_OFF_PLATE).sum()),
+        "strikeouts outside, away (all pitches)": int(struck_out.zone.isin(AWAY_OFF_PLATE).sum()),
     }
 
 
@@ -77,7 +74,7 @@ def main() -> None:
     #    the 20 before them to be compared against.
     ohtani = Batter("Shohei Ohtani")
     print(f"Found {ohtani.name} (MLB ID {ohtani.id})")
-    faced = ohtani.pitches(last=GAMES * 2, cache=True)
+    faced = ohtani.pitches(since="2026-06-28", until="2026-08-16", cache=True)
     if faced.empty:
         print("No pitches found.")
         return
@@ -109,20 +106,7 @@ def main() -> None:
     print("Strikeouts by zone:")
     print(struck_out.zone.value_counts().sort_index().to_string(), "\n")
 
-    # 4. Which side of the plate is away? Nothing in the feed says, but a
-    #    pitch that hits a batter is on that batter's side of it -- and
-    #    Ohtani pitches, so his own hit batters settle the sign.
-    thrown = Pitcher("Shohei Ohtani").pitches(season=2026, cache=True)
-    hit_batters = thrown.to_frame().query("pitch_call == 'hit_by_pitch'")
-    print("Batters Ohtani has hit, by side and location:")
-    print(
-        hit_batters[["game_date", "batter_name", "batter_stand", "plate_x"]]
-        .round(2)
-        .to_string(index=False),
-        "\n",
-    )
-
-    # 5. Chase rate, split by pitch family and side of the plate.
+    # 4. Chase rate, split by pitch family and side of the plate.
     off_plate = recent.filter(in_zone=False).to_frame()
     off_plate["family"] = off_plate.pitch_type.isin(SPIN).map({True: "spin", False: "fastball"})
     off_plate["side"] = off_plate.plate_x.map(lambda x: "away" if x < 0 else "in")
@@ -139,7 +123,7 @@ def main() -> None:
     recent.filter(pitch_type=SPIN).plot_zone(kind="zones", out=str(spin_zones))
     print(f"Saved the spin he faced, counted into zones, to {spin_zones}\n")
 
-    # 6. Is any of it new?
+    # 5. Compare the two windows.
     print(f"The last {GAMES} games against the {GAMES} before them:")
     windows = {
         f"through {prior.to_frame().game_date.max()}": summarize(prior),
@@ -164,13 +148,13 @@ def main() -> None:
     ).plot_zone(
         grid=True,
         title="The pitches Ohtani struck out on",
-        subtitle=f"{len(struck_out)} strikeouts \u00b7 last {GAMES} games"
+        subtitle=f"{len(struck_out)} strikeouts \u00b7 Jul 25–Aug 16, 2026"
         " \u00b7 catcher's view, so away is left",
         out=str(plot),
     )
     print(f"Saved the strikeout pitches to {plot}\n")
 
-    # 7. The strikeouts that came on spin off the plate, and their clips.
+    # 6. The strikeouts that came on spin off the plate, and their clips.
     chase_strikeouts = struck_out[
         struck_out.zone.isin(AWAY_OFF_PLATE) & struck_out.pitch_type.isin(SPIN)
     ]

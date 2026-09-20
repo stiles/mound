@@ -1,207 +1,122 @@
-# Did Díaz miss "right in the middle"?
+# Díaz blamed his fastball. The inning tells a fuller story.
 
-A worked example: taking a pitcher's own explanation for a bad night and checking it against the pitches he actually threw.
+Five fastballs in the middle third of the zone helped explain another blown save. The sliders that followed mattered, too.
 
-Edwin Díaz blew a save for the Dodgers against Milwaukee on Aug. 13, 2026, his third blown save in four appearances. Afterward he said:
+Edwin Díaz blamed his fastball. After blowing a save against Milwaukee on Aug. 13, 2026, his third in four appearances for the Dodgers, he said:
 
 > "I was throwing my fastball right in the middle. When you miss in the middle, you pay."
 
-That's a testable claim. This walkthrough goes from a name to an answer in seven steps, using the CLI for the quick looks and Python where the question gets specific. Every command here is runnable as written; `examples/diaz_blown_saves.py` does the whole thing in one script.
+The locations support him. Five of his 15 fastballs finished in the middle third of the strike zone, nearly twice his season rate. Two became singles. But the hits that drove in the runs came on sliders, including one outside the zone.
 
-## 1. Find the pitcher
+His explanation fit the start of the rally. It didn't explain all of it.
 
-Start with the name. `search` returns everyone who matches, which is how you disambiguate — the Stats API knows three Edwin Díazes, and only one of them pitches for Los Angeles.
+## Four singles between two strikeouts
 
-```bash
-mound search "Edwin Diaz"
-```
+Díaz opened the ninth by striking out William Contreras. Then came four consecutive singles before he struck out Gary Sánchez. The fastballs to Joey Ortiz and David Hamilton put runners on; the sliders to Jackson Chourio and Garrett Mitchell brought runs home.
 
-```
-621242	Edwin Díaz	Pitcher	Los Angeles Dodgers
-641521	Edwin Díaz	Shortstop	Sugar Land Space Cowboys
-134262	Edwin Diaz	Second Base	Olmecas de Tabasco
-```
+| Batter | Final pitch | Velocity | Result |
+| --- | --- | ---: | --- |
+| William Contreras | Slider | 88.9 mph | Strikeout |
+| Joey Ortiz | Fastball | 95.9 mph | Single |
+| David Hamilton | Fastball | 96.1 mph | Single |
+| Jackson Chourio | Slider | 91.1 mph | Single |
+| Garrett Mitchell | Slider | 90.0 mph | Single |
+| Gary Sánchez | Fastball | 96.8 mph | Strikeout |
 
-Every other command takes the same name (or `621242`, if you'd rather be explicit). Accents are optional in the argument, but Mound will report the name the way MLB does.
-
-## 2. Find the games
-
-"His last four appearances" is a Mound argument, not something you have to look up: `--last 4`. Pull the pitches first, then read the game IDs off the collection.
-
-```python
-from mound import Pitcher
-
-diaz = Pitcher("Edwin Díaz")
-last4 = diaz.pitches(last=4, cache=True)
-
-print(last4.games)
-print(last4.to_frame().groupby(["game_date", "game_pk"]).size())
-```
-
-```
-[823915, 823918, 825049, 825051]
-
-game_date   game_pk
-2026-08-07  825051     17
-2026-08-08  825049     24
-2026-08-10  823918     12
-2026-08-13  823915     24
-```
-
-Four appearances, 77 pitches, one inning or less in each — the shape of a closer's workload. The `game_pk` values are MLB's own game IDs, and they're what you pass to `--game` from here on.
-
-One thing the pitch data won't tell you: which of these were saves and which were blown. Saves are a scoring decision, not a Statcast measurement, so that comes from the MLB Stats API game log. For the record: Aug. 7 (blown), Aug. 8 (blown), Aug. 10 (save), Aug. 13 (blown). The same log shows a three-month gap between Apr. 19 and Jul. 29 — the elbow surgery — so these are his fourth through seventh appearances back, not his first four.
-
-## 3. Download every pitch
-
-`--export` writes the full pitch-level table, one row per pitch, with location, velocity, spin, movement, count, batter and outcome.
-
-```bash
-mound pitches "Edwin Díaz" --last 4 --cache --export diaz_last4.csv
-```
-
-```
-Showing 20 of 77 pitch(es).
-Exported 77 pitch(es) to diaz_last4.csv
-```
-
-`--cache` stores each game's raw Savant response under `~/.cache/mound`, keyed by game ID. Repeat runs only fetch games they haven't seen, which matters here because the rest of this walkthrough queries the same four games a dozen different ways.
-
-> **A note on caching a live game.** A finished game never changes, but a game *in progress* does, so Mound won't cache one — a live game re-fetches on every call and starts being cached once it goes final. Writing this walkthrough is what turned that up: the Aug. 13 game had been cached mid-inning by an earlier version, and `--last 4` quietly returned three games instead of four. Versions before 0.7.1 will still have entries like that on disk; the fix ignores and replaces them on the next run.
-
-Individual games work the same way, which is how you'd pull just the blown save:
-
-```bash
-mound pitches "Edwin Díaz" --game 823915 --pitch fastball --cache
-```
-
-```
-Edwin Díaz · 2026-08-13 · game 823915 · four-seam fastball
- inn  ab count            batter  velo zone            call    result
-   9  66   0-0 William Contreras  97.2    2   called_strike
-   9  66   0-1 William Contreras  96.2   11            ball
-   9  66   1-2 William Contreras  95.0   11            ball
-   9  67   0-0        Joey Ortiz  96.2    9   called_strike
-   9  67   0-1        Joey Ortiz  97.6   14            ball
-   9  67   1-1        Joey Ortiz  95.9    4   hit_into_play    Single
-   9  68   0-0    David Hamilton  96.7    5 swinging_strike
-   9  68   0-1    David Hamilton  95.8   11            ball
-   9  68   2-2    David Hamilton  96.1    5   hit_into_play    Single
-   9  69   1-0   Jackson Chourio  97.6    3   called_strike
-   9  69   2-1   Jackson Chourio  97.3   14            ball
-   9  69   3-1   Jackson Chourio  95.8    1 swinging_strike
-   9  70   0-0  Garrett Mitchell  98.2    6   called_strike
-   9  71   0-0      Gary Sánchez  95.4    6   called_strike
-   9  71   0-2      Gary Sánchez  96.8    3   called_strike Strikeout
-```
-
-The date, the game and the pitch type are the same on every row, so they're stated once above the table instead of down three columns; that's what leaves room for the batter and the zone. `zone` is Statcast's numbering as it appears on Savant — 1-9 across the strike zone, 11-14 for the quadrants outside it — so 2, 3 and 11 are all up, and the two singles came off zone 4 and zone 5. The counts skip around — 0-1 to 1-2 in at-bat 66 — because `--pitch fastball` is hiding the sliders thrown in between.
-
-An outcome prints only on the pitch that produced it. Savant stamps the at-bat's result on all of its pitches, which would show this inning as a dozen singles instead of four. `--ends-at-bat` keeps just the deciding pitches, which is the whole blown save in six rows:
+That sequence is a useful place to start an investigation with Mound. One command returns the pitch that ended each plate appearance:
 
 ```bash
 mound pitches "Edwin Díaz" --game 823915 --ends-at-bat --cache
 ```
 
-```
-Edwin Díaz · 2026-08-13 · game 823915
- inn  ab count            batter pitch  velo zone          call    result
-   9  66   2-2 William Contreras    SL  88.9    7 called_strike Strikeout
-   9  67   1-1        Joey Ortiz    FF  95.9    4 hit_into_play    Single
-   9  68   2-2    David Hamilton    FF  96.1    5 hit_into_play    Single
-   9  69   3-2   Jackson Chourio    SL  91.1   14 hit_into_play    Single
-   9  70   0-1  Garrett Mitchell    SL  90.0    9 hit_into_play    Single
-   9  71   0-2      Gary Sánchez    FF  96.8    3 called_strike Strikeout
-```
+The `--ends-at-bat` filter matters: Baseball Savant repeats an at-bat's result on every pitch, so counting those results without the filter would count the same hit several times. Here, six rows describe six hitters.
 
-Two strikeouts with four singles in between, split evenly between the fastball and the slider — so this wasn't one pitch getting hit, which is where the rest of this walkthrough starts.
+The inning was part of a rough stretch shortly after Díaz returned from elbow surgery. He blew saves on Aug. 7 and Aug. 8, converted one on Aug. 10, then blew another on Aug. 13. Those were his fourth through seventh appearances back. Across the four outings, he threw 77 pitches.
 
-## 4. Pitch mix, by game
+## Where the fastballs went
 
-Díaz throws two pitches, so the mix question is really "how much fastball?"
+To check Díaz's explanation, we need a consistent definition of the middle. Here it means the middle third of the hitter's strike zone vertically, with the pitch also crossing within the width of the plate. It is a band across the zone, not just the small square at dead center. Each hitter's recorded zone height sets the boundaries.
+
+On Aug. 13, five fastballs landed in that band. Across his season through that night, 27 of 150 did.
+
+| Fastball location | Aug. 13 | Season through Aug. 13 |
+| --- | ---: | ---: |
+| Upper third | 4 of 15 (26.7%) | 30 of 150 (20.0%) |
+| Middle third | 5 of 15 (33.3%) | 27 of 150 (18.0%) |
+| Lower third | 1 of 15 (6.7%) | 13 of 150 (8.7%) |
+| Outside the zone | 5 of 15 (33.3%) | 80 of 150 (53.3%) |
+
+The difference is visible in the locations:
+
+![Edwin Díaz's four-seam fastball locations, Aug. 13, 2026](../images/diaz_ff_aug13_zone.png)
+
+Both fastballs hit for singles were in the middle band. Hamilton's was about two inches from the center of the plate; Ortiz's was roughly four inches away. Neither required a hitter to reach above the zone.
+
+The season view shows how often Díaz had worked higher, including above the strike zone:
+
+![Edwin Díaz's four-seam fastball locations, 2026 season through Aug. 13](../images/diaz_ff_season_heatmap.png)
+
+On Aug. 13, two-thirds of his fastballs were strikes by location. For the season through that game, fewer than half were. That gave Milwaukee more fastballs in the zone to swing at, though the locations alone cannot tell us where Díaz intended to throw them.
+
+The chart for the Milwaukee game takes one command:
 
 ```bash
-mound mix "Edwin Díaz" --last 4 --cache
+mound zone "Edwin Díaz" --game 823915 --pitch fastball --cache --out diaz_ff_aug13_zone.png
 ```
 
-```
-four-seam fastball        61.0%
-slider                    39.0%
+## The cost of the middle
+
+The Aug. 13 singles weren't the only examples. Five days earlier, Arizona's Geraldo Perdomo and Corbin Carroll tripled on fastballs in the middle band. Both pitches crossed less than an inch from the horizontal center of the plate, at 96.5 and 98.6 mph.
+
+Across the season sample, hitters put 10 of Díaz's 27 middle-third fastballs in play. They swung and missed at just two. Those 27 pitches accounted for 18% of his fastballs but 10 of the 19 balls in play against the pitch.
+
+| Fastball location | Pitches | Swing rate | Whiffs | Balls in play |
+| --- | ---: | ---: | ---: | ---: |
+| Upper third | 30 | 46.7% | 4 | 3 |
+| Middle third | 27 | 70.4% | 2 | 10 |
+| Lower third | 13 | 30.8% | 0 | 1 |
+| Outside the zone | 80 | 26.2% | 4 | 5 |
+
+Hitters offered more often at the fastball in the middle, and seldom missed when they did. That supports Díaz's concern about the location. Balls in play aren't all damage, however: this table includes outs as well as hits.
+
+Nor does the evidence point to a simple loss of velocity. His fastball averaged 96.5 mph against Milwaukee, compared with 97.0 across the four outings. Hitters missed on half their swings against each of his two pitches that night. Those are small samples, but the inning included missed bats as well as hittable fastballs.
+
+His pitch mix changed little, either: 62.5% fastballs on Aug. 13, compared with 61.0% across the four appearances. That doesn't settle whether he chose the right pitch in each count. It does mean the broad mix offers little explanation for the result.
+
+## The sliders complicate the diagnosis
+
+Chourio singled on a slider outside the zone. Mitchell followed with a single on one at the bottom of it. The fastballs had helped create the trouble, but a fastball-location fix alone would not account for every hit in the inning.
+
+That distinction matters in a sample this small. Fifteen fastballs can describe one night; they cannot establish a lasting command problem. Even the season comparison contains only 150, and includes the Milwaukee outing itself.
+
+Díaz's explanation holds up as a description of two costly fastballs. The rest of the inning is a reminder of how quickly a closer's margin can disappear: two singles on fastballs in the middle, then two more on sliders somewhere else.
+
+## Reproduce the analysis
+
+The [companion script](../../examples/diaz_blown_saves.py) prints the location and outcome tables, exports the four outings, draws the Aug. 13 location chart and downloads the Hamilton single:
+
+```bash
+python examples/diaz_blown_saves.py
 ```
 
-`usage_rate()` breaks the same number out by game, which is the version worth looking at — a one-line summary across four outings hides whatever changed between them.
+Outputs go to `examples/output/`. The script needs access to MLB's Stats API and Baseball Savant. The numbers shown here are from the original analysis; upstream data corrections can change later results. The dates are fixed so later appearances do not enter the sample.
+
+For an interactive session, retrieve the same four outings and the season comparison:
 
 ```python
-last4.usage_rate(by="game_date").round(1)
+from mound import Pitcher
+
+# MLB ID 621242 identifies the Dodgers pitcher; names work too.
+diaz = Pitcher(621242)
+last4 = diaz.pitches(since="2026-08-07", until="2026-08-13", cache=True)
+season = diaz.pitches(season=2026, until="2026-08-13", cache=True)
 ```
 
-```
-pitch_type  four-seam fastball  slider
-game_date
-2026-08-07                64.7    35.3
-2026-08-08                50.0    50.0
-2026-08-10                75.0    25.0
-2026-08-13                62.5    37.5
-```
-
-Nothing dramatic. He leaned on the slider more in the Aug. 8 blown save and less in the Aug. 10 clean save, but on Aug. 13 he threw his normal mix. Whatever went wrong, it wasn't pitch selection.
-
-## 5. The arsenal: swing, whiff and chase
-
-`mound arsenal` puts usage, results and stuff in one table — how often he threw each pitch and what hitters did with it on the left, velocity, spin and movement on the right (`hb` and `ivb` are horizontal and induced vertical break).
-
-```bash
-mound arsenal "Edwin Díaz" --last 4 --cache
-```
-
-```
-                    pitches  usage%  strike%  whiff%  chase%  velo  spin    hb   ivb
-four-seam fastball       47    61.0     70.2    27.8    25.0  97.0  2337  13.8  11.7
-slider                   30    39.0     63.3    33.3    45.0  90.3  2284   2.3   5.3
-```
-
-Add swing rate — the third angle, and the one that says how often hitters were tempted at all — by composing the pieces yourself:
-
-```python
-arsenal = last4.pitch_metrics().round(1)
-arsenal["swing_rate"] = last4.swing_rate(by_pitch_type=True).round(1)
-arsenal["whiff_rate"] = last4.whiff_rate(by_pitch_type=True).round(1)
-arsenal["chase_rate"] = last4.chase_rate(by_pitch_type=True).round(1)
-```
-
-```
-                    pitches  velocity  ...  swing_rate  whiff_rate  chase_rate
-four-seam fastball       47      97.0  ...        38.3        27.8        25.0
-slider                   30      90.3  ...        50.0        33.3        45.0
-```
-
-The three rates answer different questions and shouldn't be read as one number: swing rate is out of every pitch, whiff rate is out of swings and chase rate is out of pitches *outside* the zone (see [the README](../../README.md#whiff-rate-chase-rate-and-pitch-metrics)). The slider is doing its job — hitters go after it half the time, chase it out of the zone 45% of the time and miss a third of their swings.
-
-Narrow to the blown save and the picture gets stranger:
-
-```bash
-mound arsenal "Edwin Díaz" --game 823915 --cache
-```
-
-```
-                    pitches  usage%  strike%  whiff%  chase%  velo  spin    hb   ivb
-four-seam fastball       15    62.5     66.7    50.0     0.0  96.5  2325  15.1  12.1
-slider                    9    37.5     66.7    50.0    50.0  90.1  2309   2.1   5.8
-```
-
-He missed *more* bats on Aug. 13 than usual: a 50% whiff rate on both pitches, against 27.8% and 33.3% across the four outings. The velocity is there too — 96.5 mph on the night, and 96.7 mph since coming back versus 95.7 mph before the surgery. This wasn't a night where the stuff disappeared, which makes his own explanation more plausible, not less: a pitcher missing bats who still gives up four hits is a pitcher whose mistakes were very hittable.
-
-## 6. Test the quote
-
-"Right in the middle" needs a definition before it can be checked. Two useful ones:
-
-- **Vertically**, the middle third of the strike zone. Mound reports `sz_top` and `sz_bot` per pitch, so the zone is measured against the hitter standing there rather than one fixed height.
-- **Horizontally**, the middle third of the plate — `plate_x` within about 0.24 feet of center.
-
-Díaz is a high-fastball pitcher, so the vertical definition is the one that matters: for him, "in the middle" means the ball didn't finish up where it was supposed to.
+The location calculation uses `plate_z` for pitch height and `sz_bot` and `sz_top` for the hitter's zone. Pitches outside the zone are counted separately. These are geometric boundaries, not the umpire's calls.
 
 ```python
 import pandas as pd
+
 
 def height_bands(frame):
     f = frame.dropna(subset=["plate_x", "plate_z"]).copy()
@@ -214,164 +129,33 @@ def height_bands(frame):
     f.loc[~f["in_zone"].astype(bool), "band"] = "out of zone"
     return f
 
-season = diaz.pitches(season=2026, cache=True)
+
 season_ff = height_bands(season.to_frame().query("pitch_type == 'four-seam fastball'"))
 aug13_ff = season_ff[season_ff["game_date"] == "2026-08-13"]
 
-pd.DataFrame({
+print(pd.DataFrame({
     "Aug 13": aug13_ff["band"].value_counts(normalize=True).mul(100),
-    "2026 season": season_ff["band"].value_counts(normalize=True).mul(100),
-}).round(1)
+    "Season through Aug 13": season_ff["band"].value_counts(normalize=True).mul(100),
+}).round(1))
 ```
 
-```
-             Aug 13  2026 season
-band
-high           26.7         20.0
-low             6.7          8.7
-middle         33.3         18.0
-out of zone    33.3         53.3
-```
-
-He's right. A third of his fastballs on Aug. 13 finished in the middle third of the zone, against 18% for the season. Run the same split across each outing since he came back and only one other night reaches that mark — the Aug. 8 blown save, also 33%; the other five range from 7% to 18%. The other half of the table matters too: he missed out of the zone only 33% of the time, against 53% for the season. His fastball is supposed to be a chase pitch above the zone. On Aug. 13 it was a strike.
-
-The plot says the same thing faster:
+To inspect velocity, movement and hitter responses, or export the underlying rows:
 
 ```bash
-mound zone "Edwin Díaz" --game 823915 --pitch fastball --cache --out diaz_ff_aug13_zone.png
+mound arsenal "Edwin Díaz" --since 2026-08-07 --until 2026-08-13 --cache
+mound pitches "Edwin Díaz" --since 2026-08-07 --until 2026-08-13 --cache --export diaz_last4.csv
 ```
 
-![Edwin Díaz's four-seam fastball locations, Aug. 13, 2026](../images/diaz_ff_aug13_zone.png)
+`--cache` reuses completed game feeds on later runs. Mound retrieves player identities and game logs from MLB's Stats API and pitch measurements from Baseball Savant. Save and blown-save designations come from the game log, not from pitch measurements.
 
-Five of the 15 sit at belt height, all of them within the width of the plate and three within four inches of its center. For contrast, here's where the pitch lives across the whole season:
+## Watch the pitches
 
-```bash
-mound zone "Edwin Díaz" --since 2026-03-01 --pitch fastball --kind heatmap --cache --out diaz_ff_season_heatmap.png
-```
-
-![Edwin Díaz's four-seam fastball locations, 2026 season](../images/diaz_ff_season_heatmap.png)
-
-Or put numbers on the same picture with `--kind zones`, which counts the season into the zones the table above filtered by:
-
-```bash
-mound zone "Edwin Díaz" --since 2026-03-01 --pitch fastball --kind zones --cache --out diaz_ff_season_zones.png
-```
-
-![Edwin Díaz's four-seam fastball counted into Statcast's zones, 2026 season](../images/diaz_ff_season_zones.png)
-
-One fastball all season finished in zone 8, below the belt over the middle of the plate. The busiest cell is zone 5, dead center, at 17 — and one of the two fastballs Milwaukee singled on that night came from it. The upper quadrants outside the zone hold 60 between them, which is the pitch doing its intended job.
-
-### And does he actually pay for it?
-
-The second half of the quote is a separate claim, and it holds up better than the first. Split the season's fastballs by band and look at what hitters did with each:
-
-```python
-grouped = season_ff.groupby("band")
-pd.DataFrame({
-    "pitches": grouped.size(),
-    "swing_rate": 100 * grouped["is_swing"].mean(),
-    "whiffs": grouped["is_whiff"].sum(),
-    "balls_in_play": grouped["pitch_call"].apply(lambda s: (s == "hit_into_play").sum()),
-}).round(1)
-```
-
-```
-             pitches  swing_rate  whiffs  balls_in_play
-band
-high              30        46.7       4              3
-low               13        30.8       0              1
-middle            27        70.4       2             10
-out of zone       80        26.2       4              5
-```
-
-Eighteen percent of his fastballs account for more than half of the contact against them. Hitters swing at the middle-third fastball 70% of the time and almost never miss it — two whiffs all season, against ten balls in play. The pitch up gets swung at less and missed more.
-
-### Which pitches got hit
-
-Line up the balls in play against the same bands and the mechanism is visible one pitch at a time:
-
-```python
-contact = height_bands(last4.to_frame())
-contact[contact["pitch_call"] == "hit_into_play"]
-```
-
-```
- game_date      batter_name         pitch_type  velocity  plate_x  height_pct        band at_bat_result
-2026-08-07 Ryan Waldschmidt             slider      90.1     0.02       73.86        high      Home Run
-2026-08-08  Geraldo Perdomo four-seam fastball      96.5     0.06       65.13      middle        Triple
-2026-08-08   Corbin Carroll four-seam fastball      98.6     0.07       57.21      middle        Triple
-2026-08-08   Gabriel Moreno             slider      90.4    -0.10       40.61      middle       Lineout
-2026-08-08      Ketel Marte four-seam fastball      95.1     0.26      114.59 out of zone       Pop Out
-2026-08-10    Isaac Collins four-seam fastball      97.0     0.20       66.24      middle        Flyout
-2026-08-10       Kyle Isbel             slider      90.6     0.31       -8.50 out of zone     Groundout
-2026-08-13       Joey Ortiz four-seam fastball      95.9    -0.35       57.39      middle        Single
-2026-08-13   David Hamilton four-seam fastball      96.1    -0.18       63.71      middle        Single
-2026-08-13  Jackson Chourio             slider      91.1     1.18        2.26 out of zone        Single
-2026-08-13 Garrett Mitchell             slider      90.0     0.67       18.84         low        Single
-```
-
-Every fastball hit in the three blown saves but one was in the middle band, and the two Arizona triples on Aug. 8 were as close to dead center as the data gets — `plate_x` of 0.06 and 0.07 feet, less than an inch off the middle of the plate.
-
-But the Aug. 13 inning has a wrinkle his quote skips. The two center-cut fastballs were singles that put runners on; the two hits that actually drove in the runs came off sliders, one of them out of the zone entirely and the other at the bottom of it. The middle-middle fastball started the rally. It didn't finish it.
-
-## 7. Watch the pitches
-
-Every pitch carries a `pitch_id`, which doubles as the play ID on a Baseball Savant clip page. If you know the at-bat, you can address a pitch by position: the Hamilton single was the fifth pitch of at-bat 68.
+Download the Hamilton single by its position in the game, or the two Arizona triples by their pitch IDs:
 
 ```bash
 mound video "Edwin Díaz" --game 823915 --at-bat 68 --pitch-number 5 --cache --out-dir clips
-```
-
-```
-Saved 1 of 1 clip(s) to clips
-```
-
-If you already have the ID from an export, skip the lookup:
-
-```bash
 mound video-id a08dfb7d-1acd-3776-a6d8-0f5e80cdb0c6 --out clips/perdomo_triple_aug8.mp4
 mound video-id 13f4b8d1-39f4-3499-b696-8a3311899fde --out clips/carroll_triple_aug8.mp4
 ```
 
-Those two are the Aug. 8 triples — the clearest video evidence of the pattern, since both fastballs were middle-middle at 96 and 98 mph and both ended up in the gap. Whole at-bats work too, by dropping `--pitch-number`; so does an entire outing, though at 24 clips it's a slower download than it looks.
-
-## What the data says
-
-Díaz was right about the fastball, and roughly right about why. He put a third of his four-seamers in the middle third of the zone on Aug. 13, nearly double his season rate, and threw the pitch out of the zone barely more than half as often as usual. That's the pitch he's supposed to elevate finishing flat, and the season splits show it's the one location where hitters do damage against him.
-
-Where the quote oversimplifies: his stuff was fine — 96.5 mph, a 50% whiff rate on both pitches — and the two runs on Aug. 13 scored on sliders, not on the fastballs he was talking about. The honest version is that the middle-middle fastball is what puts runners on base, and with a closer working in the ninth, that's usually enough.
-
-Worth keeping in mind: this is 15 fastballs in one appearance and 150 across the season. Rates built on samples that small move a lot on a pitch or two, and Statcast's `in_zone` is calculated geometry rather than the umpire's call, so the band boundaries here are exact in a way that a real strike zone never is.
-
-## Reproduce it
-
-```bash
-python examples/diaz_blown_saves.py
-```
-
-Writes the tables above, the location plot and one clip to `examples/output/`.
-
-## Going further
-
-Two windows side by side, using `plot_zone`'s `ax` argument to build a multi-panel figure:
-
-```python
-import matplotlib.pyplot as plt
-
-post = diaz.pitches(since="2026-07-29", pitch_type="fastball", cache=True)
-before = post.filter(until="2026-08-10")
-aug13 = post.filter(since="2026-08-13")
-
-fig, axes = plt.subplots(1, 2, figsize=(9, 5.6))
-before.plot_zone(ax=axes[0], title=f"Jul 29–Aug 10: {len(before)} fastballs")
-aug13.plot_zone(ax=axes[1], title=f"Aug 13: {len(aug13)} fastballs")
-fig.savefig("diaz_ff_panels.png", dpi=150)
-```
-
-![Edwin Díaz's fastball locations, before and during the Aug. 13 blown save](../images/diaz_ff_panels.png)
-
-Other directions from the same data:
-
-- `mound arsenal "Edwin Díaz" --last 4 --stand L` splits the arsenal by batter handedness, or `mound zone --split-by stand` does it visually.
-- `diaz.pitches(last=4, batter="Chourio")` scopes any of this to one hitter, for the matchup version of the question.
-- `Batter("Jackson Chourio").pitches(last=10)` asks it from the other side: everything that hitter saw, from every pitcher.
+A useful next question is whether location changed by count or batter handedness. The exported table includes both; the [Python API](../../README.md#working-with-pitches) can narrow the same collection without downloading the games again.
